@@ -51,7 +51,7 @@ Status: `not started` | `in progress` | `blocked` | `done`
 | E3-01 | done | Add algorithm registry and selector | E1-07 | Algorithm changes stop/reset the current pattern and create a fresh instance; available algorithms and descriptions are shown. |
 | E3-02 | done | Implement SineWave and Ramp patterns | E3-01, E1-06 | Outputs are deterministic under test inputs, normalized, resettable, and documented. |
 | E3-03 | done | Implement RandomWalk and ClosenessAdaptive patterns | E3-01, E1-06 | Randomness is seedable in tests; closeness 1–5 behavior matches documented profiles and stays safely bounded. |
-| E3-04 | not started | Finish closeness, intensity, and soft-mode experience | E1-05, E3-01 | UI provides text plus non-color-only closeness feedback, history/events, visible shortcut hints, and accessible controls. |
+| E3-04 | done | Finish closeness, intensity, and soft-mode experience | E1-05, E3-01 | UI provides text plus non-color-only closeness feedback, history/events, visible shortcut hints, and accessible controls. |
 | E3-05 | not started | Add diagnostics and error presentation | E2-03, E3-01 | Current safe command, timestamp, transport/session state, algorithm debug values, and actionable errors are visible without exposing sensitive data. |
 
 ## Milestone 4 — Hardening and release readiness
@@ -79,13 +79,16 @@ Status: `not started` | `in progress` | `blocked` | `done`
   Start/Pause) — its failure path is Playwright-tested for real (connecting
   to a port nothing listens on), but the success/discovery path has **not**
   been verified against a real Intiface service by anyone yet.
-- **E2-04 is blocked on a human**: it requires a real (or simulated)
-  Intiface Central/Engine instance to validate against, which does not
-  exist in this environment. Use the "Real Intiface connection (diagnostic)"
-  panel to connect and discover devices, then confirm: connecting never
-  starts movement, explicit device selection is required, and
-  stop/disconnect/error actually stops the selected device. Log findings and
-  version details in `WORK_LOG.md` when done.
+- **E2-04 remains blocked, but partially validated (2026-09-13)**: a human
+  confirmed on Windows that the "Real Intiface connection (diagnostic)"
+  panel connects to a real Intiface service and discovery succeeds
+  end-to-end (WebSocket transport + device list both work outside this
+  sandbox). The three safety behaviors E2-04 actually requires — connecting
+  never starts movement, explicit device selection is required, and
+  stop/disconnect/error actually stops the selected device — were **not**
+  yet checked during that pass. See `WORK_LOG.md` 2026-09-13 for the exact
+  scope of what was and wasn't verified. Re-run the same panel and confirm
+  those three behaviors specifically to close E2-04.
 - Milestone 3 doesn't depend on E2-04, so work continues there in the
   meantime. `src/algorithms/AlgorithmRegistry.ts` is the single source of
   truth for available algorithms (currently just `constant`); it derives
@@ -96,6 +99,36 @@ Status: `not started` | `in progress` | `blocked` | `done`
   E3-03) — every algorithm in the architecture brief's "Algorithm examples"
   list is done except `CompositePattern` (item 6), which isn't on the task
   board and isn't required by any milestone-3 task.
-- The next executable tasks are **E3-04** (finish the closeness/intensity/
-  soft-mode UI experience: non-color-only feedback, history/events,
-  accessible controls) and **E3-05** (diagnostics and error presentation).
+- **E3-04 done (2026-09-13)**: `src/state/sessionState.ts` replaced the
+  single `lastEvent: string` field with `eventLog: readonly SessionEvent[]`
+  (newest first, capped at 20 via the `withEvent()` helper); lifecycle
+  actions (connect/disconnect/select/start/pause/stop/reset) push a
+  timestamped entry, but high-frequency actions (`set-closeness`,
+  `set-intensity`, `toggle-soft-mode`) intentionally don't, to avoid
+  flooding the log. `App.tsx` renders the log as a scrollable list with an
+  `aria-live` region announcing only the newest entry, adds visible `<kbd>`
+  shortcut hints next to Start/Pause, the Closeness heading, and the
+  Intensity label (in addition to the existing footer legend), and adds
+  `aria-pressed`/`aria-label`/`role="group"`/`aria-valuetext` to the
+  closeness buttons, run toggle, and intensity slider. Closeness/status
+  feedback was already text-first (not color-only); no change needed there.
+- The next executable task is **E3-05** (diagnostics and error
+  presentation). E2-04 remains open pending the safety-behavior checks
+  above.
+- **Environment note (2026-09-13)**: this sandbox's `node_modules/.bin` is
+  empty — likely npm's bin symlinks not surviving the vboxsf shared-folder
+  mount (same class of issue noted for `stash_audio`). Workaround: invoke
+  each tool's entry point directly, e.g. `node node_modules/eslint/bin/eslint.js .`,
+  `node node_modules/typescript/bin/tsc -b`,
+  `node node_modules/vite/bin/vite.js build`,
+  `node node_modules/@playwright/test/cli.js test` (start
+  `node node_modules/vite/bin/vite.js --host 127.0.0.1 --port 4173`
+  yourself first so Playwright's `webServer` reuses it instead of running
+  its own `npm run dev`, which fails the same way). Separately, this
+  sandbox only has Node 18.19.1 installed (project requires 20.19+, per
+  `package.json` `engines`); Vitest's jsdom dependency chain
+  (`html-encoding-sniffer`'s `@exodus/bytes`) requires `require(esm)`
+  support that doesn't exist in Node 18, so `npm run test` cannot currently
+  run in this sandbox at all — confirmed pre-existing (unrelated to E3-04),
+  not something to fix by changing the app's dependencies. tsc, ESLint,
+  Vite build, and Playwright are unaffected and all pass.

@@ -13,6 +13,13 @@ import './App.css'
 
 const closenessLabels = ['Far', 'Approaching', 'Close', 'Very close', 'At edge']
 
+const eventTimeFormatter = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+
+/** Renders an event-log timestamp as a local wall-clock time; falls back to a placeholder for the seeded `at: 0` entry. */
+function formatEventTime(at: number): string {
+  return at === 0 ? '—' : eventTimeFormatter.format(new Date(at))
+}
+
 function createRuntime(isSoftMode: () => boolean) {
   const transport = new FakeTransport(
     fakeDevices.map((device) => ({
@@ -189,15 +196,15 @@ function App() {
 
   return (
     <main className="app-shell">
-      <header><div><p className="eyebrow">Local-only control surface</p><h1>Edger</h1></div><span className={`status status-${session.status}`} data-testid="session-status">{session.status}</span></header>
+      <header><div><p className="eyebrow">Local-only control surface</p><h1>Edger</h1></div><span className={`status status-${session.status}`} aria-live="polite" data-testid="session-status">{session.status}</span></header>
       <section className="panel split"><div><h2>Connection</h2><p>Development mode uses an in-memory fake device. No hardware is contacted.</p></div><button className="secondary" onClick={() => void handleConnectToggle()}>{ready ? 'Disconnect' : 'Connect fake device'}</button></section>
       <div className="grid">
         <section className="panel"><h2>Device</h2><label>Selected device<select value={session.selectedDeviceId ?? ''} disabled={!ready || running} onChange={(event) => handleSelectDevice(event.target.value)}>{!session.selectedDeviceId && <option value="">Connect to choose</option>}{fakeDevices.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select></label><p className="hint">{fakeDevices.find((option) => option.id === session.selectedDeviceId)?.capabilities ?? '—'}</p></section>
         <section className="panel"><h2>Algorithm</h2><label>Pattern<select value={session.selectedAlgorithmId} onChange={(event) => handleSelectAlgorithm(event.target.value)}>{algorithmDescriptors.map((algorithm) => <option key={algorithm.id} value={algorithm.id}>{algorithm.name}</option>)}</select></label><p className="hint">{algorithmDescriptors.find((algorithm) => algorithm.id === session.selectedAlgorithmId)?.description ?? 'Runs through the bounded control engine and safety layer.'}</p></section>
       </div>
-      <section className="panel split"><div><h2>Session</h2><p>Start is unavailable until a device is ready.</p></div><div className="buttons"><button disabled={!ready} onClick={handleToggleRun}>{running ? 'Pause' : 'Start'}</button><button className="stop" onClick={handleStopReset}>Stop &amp; reset <kbd>Esc</kbd></button></div></section>
-      <section className="panel split"><div><h2>Closeness</h2><p className="closeness" aria-live="polite" data-testid="closeness-value">{session.closeness} <span>{closenessLabels[session.closeness - 1]}</span></p></div><div className="buttons" aria-label="Set closeness level">{[1, 2, 3, 4, 5].map((level) => <button className={level === session.closeness ? 'selected' : 'level'} key={level} onClick={() => dispatch({ type: 'set-closeness', closeness: level as 1 | 2 | 3 | 4 | 5 })}>{level}</button>)}</div></section>
-      <section className="panel intensity"><label><span>Intensity scale</span><output>{Math.round(session.intensityScale * 100)}%</output><input max="1" min="0" onChange={(event) => dispatch({ type: 'set-intensity', intensityScale: Number(event.target.value) })} step="0.05" type="range" value={session.intensityScale} /></label><label className="check"><input checked={session.softMode} onChange={() => dispatch({ type: 'toggle-soft-mode' })} type="checkbox" />Soft mode</label></section>
+      <section className="panel split"><div><h2>Session</h2><p>Start is unavailable until a device is ready.</p></div><div className="buttons"><button disabled={!ready} aria-pressed={running} onClick={handleToggleRun}>{running ? 'Pause' : 'Start'} <kbd>Space</kbd></button><button className="stop" onClick={handleStopReset}>Stop &amp; reset <kbd>Esc</kbd></button></div></section>
+      <section className="panel split"><div><h2>Closeness <kbd>[</kbd> <kbd>]</kbd></h2><p className="closeness" aria-live="polite" data-testid="closeness-value">{session.closeness} <span>{closenessLabels[session.closeness - 1]}</span></p></div><div className="buttons" role="group" aria-label="Set closeness level">{[1, 2, 3, 4, 5].map((level) => <button className={level === session.closeness ? 'selected' : 'level'} aria-pressed={level === session.closeness} aria-label={`Closeness ${level}: ${closenessLabels[level - 1]}`} key={level} onClick={() => dispatch({ type: 'set-closeness', closeness: level as 1 | 2 | 3 | 4 | 5 })}>{level}</button>)}</div></section>
+      <section className="panel intensity"><label><span>Intensity scale <kbd>A</kbd> <kbd>D</kbd></span><output htmlFor="intensity-range">{Math.round(session.intensityScale * 100)}%</output><input id="intensity-range" max="1" min="0" aria-valuetext={`${Math.round(session.intensityScale * 100)}%`} onChange={(event) => dispatch({ type: 'set-intensity', intensityScale: Number(event.target.value) })} step="0.05" type="range" value={session.intensityScale} /></label><label className="check"><input checked={session.softMode} onChange={() => dispatch({ type: 'toggle-soft-mode' })} type="checkbox" />Soft mode</label></section>
       <section className="panel">
         <h2>Real Intiface connection (diagnostic)</h2>
         <p className="hint">Connects to a real Intiface/Buttplug server to discover devices and their capabilities. Does not yet drive Start/Pause above.</p>
@@ -213,8 +220,18 @@ function App() {
           </ul>
         )}
       </section>
-      <aside className="event" aria-live="polite"><strong>Session event</strong><span>{session.lastEvent}</span></aside>
-      <p className="shortcut-help">Keyboard: Space start/pause · Esc stop/reset · A/D intensity · [ / ] closeness · R reset</p>
+      <aside className="event">
+        <strong>Session history</strong>
+        <p aria-live="polite" data-testid="session-event-latest">{session.eventLog[0]?.message ?? 'No events yet.'}</p>
+        <ol className="event-log" data-testid="session-event-log">
+          {session.eventLog.map((entry) => (
+            <li key={`${entry.at}-${entry.message}`}>
+              <time dateTime={new Date(entry.at).toISOString()}>{formatEventTime(entry.at)}</time> {entry.message}
+            </li>
+          ))}
+        </ol>
+      </aside>
+      <p className="shortcut-help">Keyboard: <kbd>Space</kbd> start/pause · <kbd>Esc</kbd> stop/reset · <kbd>A</kbd>/<kbd>D</kbd> intensity · <kbd>[</kbd>/<kbd>]</kbd> closeness · <kbd>R</kbd> reset</p>
     </main>
   )
 }

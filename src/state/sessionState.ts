@@ -1,6 +1,14 @@
 import { defaultAlgorithmId } from '../algorithms/AlgorithmRegistry'
 import type { Closeness, DeviceCapabilities, SessionStatus } from '../engine/types'
 
+/** One entry in the session's event history, newest first. */
+export interface SessionEvent {
+  message: string
+  at: number
+}
+
+const maxEventLogEntries = 20
+
 export interface SessionState {
   status: SessionStatus
   selectedDeviceId?: string
@@ -8,7 +16,7 @@ export interface SessionState {
   closeness: Closeness
   intensityScale: number
   softMode: boolean
-  lastEvent: string
+  eventLog: readonly SessionEvent[]
 }
 
 export const fakeDevices = [
@@ -28,7 +36,12 @@ export const initialSessionState: SessionState = {
   closeness: 1,
   intensityScale: 0.5,
   softMode: false,
-  lastEvent: 'Waiting for a fake device connection.',
+  eventLog: [{ message: 'Waiting for a fake device connection.', at: 0 }],
+}
+
+/** Prepends a timestamped entry to `state.eventLog`, capped at {@link maxEventLogEntries}. */
+function withEvent(state: SessionState, message: string): SessionState {
+  return { ...state, eventLog: [{ message, at: Date.now() }, ...state.eventLog].slice(0, maxEventLogEntries) }
 }
 
 export type SessionAction =
@@ -46,20 +59,37 @@ export type SessionAction =
 export function sessionReducer(state: SessionState, action: SessionAction): SessionState {
   switch (action.type) {
     case 'connect':
-      return { ...state, status: 'ready', selectedDeviceId: state.selectedDeviceId ?? fakeDevices[0].id, lastEvent: 'Fake device connected. Select Start when ready.' }
+      return withEvent(
+        { ...state, status: 'ready', selectedDeviceId: state.selectedDeviceId ?? fakeDevices[0].id },
+        'Fake device connected. Select Start when ready.',
+      )
     case 'disconnect':
-      return { ...initialSessionState, selectedAlgorithmId: state.selectedAlgorithmId, lastEvent: 'Device disconnected.' }
+      return withEvent(
+        { ...initialSessionState, selectedAlgorithmId: state.selectedAlgorithmId, eventLog: state.eventLog },
+        'Device disconnected.',
+      )
     case 'select-device':
-      return { ...state, selectedDeviceId: action.deviceId, lastEvent: 'Selected fake device.' }
+      return withEvent({ ...state, selectedDeviceId: action.deviceId }, 'Selected fake device.')
     case 'select-algorithm':
-      return { ...state, selectedAlgorithmId: action.algorithmId, lastEvent: 'Selected algorithm.' }
-    case 'toggle-run':
+      return withEvent({ ...state, selectedAlgorithmId: action.algorithmId }, 'Selected algorithm.')
+    case 'toggle-run': {
       if (state.status !== 'ready' && state.status !== 'running') return state
-      return { ...state, status: state.status === 'running' ? 'ready' : 'running', lastEvent: state.status === 'running' ? 'Session paused.' : 'Session started (command engine pending).' }
+      const running = state.status !== 'running'
+      return withEvent(
+        { ...state, status: running ? 'running' : 'ready' },
+        running ? 'Session started (command engine pending).' : 'Session paused.',
+      )
+    }
     case 'stop-reset':
-      return { ...state, status: state.selectedDeviceId ? 'ready' : 'idle', closeness: 1, intensityScale: 0.5, softMode: false, lastEvent: 'Stop and reset requested.' }
+      return withEvent(
+        { ...state, status: state.selectedDeviceId ? 'ready' : 'idle', closeness: 1, intensityScale: 0.5, softMode: false },
+        'Stop and reset requested.',
+      )
     case 'reset-session':
-      return { ...state, status: state.selectedDeviceId ? 'ready' : 'idle', closeness: 1, intensityScale: 0.5, softMode: false, lastEvent: 'Session reset requested.' }
+      return withEvent(
+        { ...state, status: state.selectedDeviceId ? 'ready' : 'idle', closeness: 1, intensityScale: 0.5, softMode: false },
+        'Session reset requested.',
+      )
     case 'set-closeness': return { ...state, closeness: action.closeness }
     case 'set-intensity': return { ...state, intensityScale: action.intensityScale }
     case 'toggle-soft-mode': return { ...state, softMode: !state.softMode }

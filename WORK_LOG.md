@@ -22,6 +22,103 @@ Template:
 
 ---
 
+## 2026-09-13 — Claude — E3-04
+
+- Status: `done`
+- Summary: Finished the closeness/intensity/soft-mode UI experience.
+  - **History/events**: `src/state/sessionState.ts`'s `SessionState.lastEvent: string`
+    is now `eventLog: readonly SessionEvent[]` (`{ message, at }`, newest
+    first, capped at 20 by a new `withEvent()` helper). Lifecycle actions
+    (connect, disconnect, select-device, select-algorithm, toggle-run,
+    stop-reset, reset-session) push a timestamped entry; `set-closeness`,
+    `set-intensity`, and `toggle-soft-mode` deliberately don't, since those
+    fire on every keypress/drag and would flood a session-events log rather
+    than showing meaningful history.
+  - **Shortcut hints**: added `<kbd>` hints next to Start/Pause (`Space`),
+    the Closeness heading (`[`/`]`), and the Intensity label (`A`/`D`), on
+    top of the existing footer legend (which now also uses `<kbd>` markup
+    instead of plain punctuation).
+  - **Accessible controls**: closeness level buttons get `aria-pressed` and
+    a descriptive `aria-label` (e.g. "Closeness 3: Close"); their container
+    is `role="group"`; the run toggle gets `aria-pressed`; the intensity
+    `<input type="range">` gets `aria-valuetext` and an `id`, with the
+    `<output>` now using `htmlFor` to associate to it; the session-status
+    badge gained `aria-live="polite"` so status changes are announced, not
+    just visually recolored.
+  - **Non-color-only feedback**: verified as already satisfied — closeness
+    and status both show text (number + label, or the status word itself),
+    color is supplementary. No change needed.
+  - New event-log CSS in `App.css` (`.event-log`, scrollable list, `<time>`
+    styling) plus a general `kbd` style usable outside dark buttons
+    (previous `kbd { background: #fff3 }` was only legible on the dark
+    `.stop` button; now `button kbd` keeps that look and bare `kbd`
+    elsewhere gets a light-panel-appropriate style).
+- Files changed: `src/state/sessionState.ts`, `src/App.tsx`, `src/App.css`,
+  `TASKS.md`.
+- Verification: this sandbox has two pre-existing, unrelated environment
+  problems (see "Environment note" in `TASKS.md`'s reference notes) —
+  `node_modules/.bin` is empty (vboxsf symlink issue) and only Node
+  18.19.1 is installed (project needs 20.19+). Worked around the first by
+  invoking each tool's entry script directly; the second blocks Vitest
+  specifically (jsdom's dependency chain needs `require(esm)`, unavailable
+  on Node 18) and could not be worked around in this sandbox.
+  - ESLint (`node node_modules/eslint/bin/eslint.js .`): clean, no output.
+  - `tsc -b`: clean, no output.
+  - Vite production build: succeeded (`dist/assets/index-IPNKf5dO.js`, 78
+    modules transformed).
+  - Playwright (`node node_modules/@playwright/test/cli.js test`, against a
+    manually started `vite` dev server on 127.0.0.1:4173 since the
+    `webServer.command` in `playwright.config.ts` hits the same `.bin`
+    issue): all 3 existing tests passed, including the flow that exercises
+    connect → select → start → closeness/intensity adjustment → Escape
+    reset — this exercises the changed reducer/UI end-to-end in a real
+    browser.
+  - Vitest (`node node_modules/vitest/vitest.mjs run`): could not run — all
+    17 test files fail identically in `jsdom`'s own setup with
+    `ERR_REQUIRE_ESM`, before any test file's code ever runs — this is a
+    Node-version gap (jsdom's `html-encoding-sniffer` → `@exodus/bytes`
+    needs `require(esm)`, absent in this sandbox's Node 18.19.1), not
+    something sensitive to which files changed. Did not diff-check against
+    the pre-change tree specifically, but a failure that occurs before any
+    test module loads can't depend on this task's edits. Existing unit
+    tests for `sessionReducer` were not actually re-run in this session as
+    a result — worth running `npm run test` on a machine with Node 20.19+
+    to confirm the new `eventLog`/`withEvent` logic before treating this as
+    fully verified there too.
+- Decisions / blockers: None specific to E3-04 itself. The two environment
+  issues above are sandbox-specific, not app bugs — logged for whoever
+  picks up the next task so they don't re-diagnose them.
+- Next action: E3-05 (diagnostics and error presentation) is the next
+  executable task. E2-04 is still open — see the entry below for exactly
+  what Windows testing did and didn't cover.
+
+## 2026-09-13 — Claude — E2-04 (partial)
+
+- Status: `blocked` (unchanged — see scope below)
+- Summary: User ran the app on Windows against a real Intiface service and
+  reported the "Real Intiface connection (diagnostic)" panel connected
+  successfully. Confirmed by that report: the real `ButtplugTransport`
+  WebSocket connection and device-discovery path both work end-to-end
+  outside this sandbox (this sandbox can only exercise the
+  connection-*failure* path, per the existing Playwright test, since
+  nothing here runs a real Intiface service).
+  - Explicitly **not yet checked**: (1) whether connecting starts any
+    device movement, (2) whether explicit device selection is enforced
+    before any command is sent, (3) whether stop/disconnect/error actually
+    halts the selected device. These three are E2-04's actual acceptance
+    criteria — connectivity alone doesn't satisfy it.
+  - No Intiface/device version details were recorded for this pass.
+- Files changed: `TASKS.md` (reference notes updated with this finding).
+- Verification: n/a (human manual test, not something this session ran).
+- Decisions / blockers: E2-04 stays `blocked` rather than `done` — logging
+  partial progress so the next validation pass only needs to check the
+  three safety behaviors above, not re-verify connectivity.
+- Next action: next time a real Intiface service is available, use the
+  same diagnostic panel and confirm: no movement on connect, selection is
+  required, and stop/disconnect/error stops the device. Log Intiface
+  version, OS, and device model along with the result. Milestone 3 work
+  (E3-04 above, E3-05 next) doesn't wait on this.
+
 ## 2026-09-13 — Claude — E3-03
 
 - Status: `done`
