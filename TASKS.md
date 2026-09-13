@@ -39,7 +39,7 @@ Status: `not started` | `in progress` | `blocked` | `done`
 
 | ID | Status | Task | Depends on | Acceptance criteria |
 | --- | --- | --- | --- | --- |
-| E2-01 | not started | Research and pin current Buttplug JS client API | E1-07 | Dependency/version, WebSocket endpoint configuration, discovery flow, and relevant command/capability API are documented from primary sources. Do not rely on the archived playground’s APIs. |
+| E2-01 | done | Research and pin current Buttplug JS client API | E1-07 | Dependency/version, WebSocket endpoint configuration, discovery flow, and relevant command/capability API are documented from primary sources. Do not rely on the archived playground’s APIs. |
 | E2-02 | not started | Implement isolated Buttplug/Intiface transport wrapper | E2-01 | All client-library code stays under `src/transport`; it connects, disconnects, discovers devices, and reports meaningful errors. |
 | E2-03 | not started | Implement capability mapping and device adapter | E2-02 | Linear/scalar/vibration capability mapping is explicit; unsupported command fields are safely ignored or rejected; UI displays discovered capabilities. |
 | E2-04 | not started | Manually validate real-service safety behavior | E2-03 | With a local Intiface service, explicit device selection is required, connection never starts movement, and stop/disconnect/error stops the selected device. Findings and version details are logged. |
@@ -69,6 +69,11 @@ Status: `not started` | `in progress` | `blocked` | `done`
 - `intiface/buttplug-playground` is useful for testing-UI ideas, but it is an
   archived Vue application. Use it as a behavioral reference only; do not
   copy its aging dependency choices or make it the foundation of this project.
-- The next executable task is **E2-01**: research and pin the current Buttplug
-  JS client API from primary sources (the archived `buttplug-playground` is a
-  behavioral reference only, not an API source).
+- Buttplug JS client API research is recorded in `BUTTPLUG_API_NOTES.md`
+  (E2-01): pin `buttplug@^5.0.1`.
+- The next executable task is **E2-02**: implement the isolated Buttplug/
+  Intiface transport wrapper under `src/transport/` (all client-library code
+  must stay there per the task board's ground rules) — install `buttplug`,
+  implement `IntifaceTransport` for real using `ButtplugClient` +
+  `ButtplugBrowserWebsocketClientConnector`, and cover connect/disconnect/
+  discover/error-reporting with tests.

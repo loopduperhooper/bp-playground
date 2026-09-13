@@ -22,6 +22,38 @@ Template:
 
 ---
 
+## 2026-09-12 — Claude — E2-01
+
+- Status: `done`
+- Summary: Researched the current `buttplug` npm client library from primary
+  sources only (npm registry metadata + the `buttplug-js` GitHub repo's
+  README and `examples/web/*.js`, not the archived `buttplug-playground`).
+  Documented package choice/version, WebSocket connection setup, the error
+  class hierarchy, the discovery/event flow, and the device
+  capability/command API (`hasOutput`/`hasInput`/`features`/`runOutput`/
+  `DeviceOutput.*`/`stop`/`battery`), plus how each maps onto our existing
+  `DeviceCommand`/`DeviceCapabilities` contracts in `src/engine/types.ts`.
+- Files changed: `BUTTPLUG_API_NOTES.md` (new), `TASKS.md`.
+- Verification: N/A (research task, no code changes). No `npm install`
+  performed yet — `buttplug` is not yet a project dependency; that's E2-02.
+- Decisions / blockers: Pinning **`buttplug@^5.0.1`**, the official
+  buttplugio/buttplug-js package, over the community fork
+  `@zendrex/buttplug.js` (`0.5.0`) that the official README itself
+  recommends as more actively developed. Chose the official package anyway
+  because it's what Intiface Central is built against, has lighter
+  dependencies (no `zod`), and the fork's `0.x` versioning is far less
+  proven than the official package's `5.0.1`. Revisit if the official
+  package is ever deprecated. Note: `docs.buttplug.io`'s dev-guide URLs
+  redirected to the site root at fetch time (2026-09-12) and
+  `buttplugio.github.io/buttplug-js`'s TypeDoc reference could not be
+  confirmed precisely via automated summarization, so the GitHub repo's
+  example source files were used as the authoritative, version-matched
+  reference instead — see `BUTTPLUG_API_NOTES.md`'s Sources section.
+- Next action: E2-02 — implement the real `IntifaceTransport` wrapper in
+  `src/transport/` per `BUTTPLUG_API_NOTES.md`, keeping all `buttplug`
+  imports isolated to that directory per the architecture brief's boundary
+  rule, and add `buttplug` as a real dependency.
+
 ## 2026-09-12 — Claude — E1-07
 
 - Status: `done`
