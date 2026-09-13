@@ -22,6 +22,69 @@ Template:
 
 ---
 
+## 2026-09-12 — Claude — E2-02
+
+- Status: `done`
+- Summary: Implemented `ButtplugTransport` (`src/transport/ButtplugTransport.ts`),
+  the real `IntifaceTransport` backed by the `buttplug` npm client per
+  `BUTTPLUG_API_NOTES.md`. It owns connect/disconnect, tracks devices via
+  `deviceadded`/`deviceremoved`/`disconnect` listeners, discovers devices by
+  scanning and racing a `scanningfinished` event against a bounded
+  `scanTimeoutMs` fallback timer, calls the client's confirmed
+  `stopAllDevices()` for `stopAll()`, and wraps every failure (including
+  `ButtplugError` subtypes) in a `Failed to <action>: <message>` `Error` so
+  callers get an actionable message instead of a raw library exception.
+  `sendNormalizedCommand` deliberately throws with a message pointing at
+  E2-03 — translating our `DeviceCommand` into `DeviceOutput.*`/`runOutput`
+  calls needs per-device capability mapping, which is that task's job, not
+  this one's.
+- Files changed: `package.json`/`package-lock.json` (added `buttplug@^5.0.1`
+  as a real dependency), `src/transport/ButtplugTransport.ts`,
+  `tests/transport/ButtplugTransport.test.ts`, `BUTTPLUG_API_NOTES.md`
+  (added the confirmed `stopAllDevices()` finding and a cross-check against
+  a sibling project, see below), `TASKS.md`.
+- Verification: ESLint passed; Vitest passed (11 files, 32 tests); `tsc -b`
+  passed; Vite production build passed; Playwright Chromium passed both
+  tests (unaffected by this change, re-run to confirm no regression).
+- Decisions / blockers: For testability, `ButtplugTransport` depends on a
+  narrow `ButtplugClientLike` interface (the handful of `ButtplugClient`
+  members it actually calls) rather than the concrete class directly, with a
+  `createClient`/`createConnector` injection seam (defaulting to real
+  `ButtplugClient`/`ButtplugBrowserWebsocketClientConnector`) — this let
+  tests script a fake client's events without needing a live Intiface
+  server or reimplementing the wire protocol, matching this project's
+  existing seam-injection pattern (`ControlEngine`'s `scheduler`/`now`).
+  The user pointed at `../stash_audio`, a sibling project with two real
+  Buttplug integrations: confirmed its Angular `buttplug.service.ts` targets
+  an older `buttplug` API generation (`device.vibrate()`,
+  `client.devices` as an array) than the `5.0.1` "Output" API we're
+  building against — don't copy its method calls. Its React code hand-rolls
+  a raw WebSocket Buttplug-wire client specifically because, per its own
+  comment, `buttplug` "can't be installed on the VirtualBox shared
+  filesystem" — but `npm install --no-bin-links buttplug` installed and
+  loaded cleanly here with the Node 20 toolchain already in use this
+  session, so that workaround looks like it was really working around the
+  plain-symlink `EPERM` this project hit too (see E0-03/E1-06 entries)
+  before finding `--no-bin-links`, not something specific to `buttplug`
+  itself. Recorded this comparison in `BUTTPLUG_API_NOTES.md` so it isn't
+  re-litigated later. One initial test-writing mistake worth flagging for
+  future sessions: two tests originally emitted a fake `'scanningfinished'`
+  event synchronously before `listDevices()`'s internal
+  `await client.startScanning()` had a chance to resume and register its
+  listener, so the event fired into nothing and the test silently fell back
+  to the real multi-second scan-timeout path (passed, but took ~4s each) —
+  fixed by flushing a real macrotask tick (`setTimeout(resolve, 0)`) between
+  triggering `listDevices()` and emitting `scanningfinished`.
+- Next action: E2-03 — implement capability mapping and a real
+  `DeviceAdapter` (`IntifaceDeviceAdapter` or similar, hardwired to
+  `ButtplugTransport` the way `FakeDeviceAdapter` is to `FakeTransport`)
+  that maps our `DeviceCommand` fields onto `device.runOutput(DeviceOutput.*)`
+  calls based on each connected device's actual `hasOutput`/`features`, and
+  fills in `ButtplugTransport.sendNormalizedCommand` accordingly (or moves
+  that responsibility fully into the new adapter — decide while implementing,
+  since `FakeTransport.sendNormalizedCommand` currently does the "sending,"
+  while `FakeDeviceAdapter` does no mapping because the fake needs none).
+
 ## 2026-09-12 — Claude — E2-01
 
 - Status: `done`

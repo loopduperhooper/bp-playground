@@ -128,6 +128,13 @@ if (device.hasInput(InputType.Battery)) {
 }
 ```
 
+`ButtplugClient` (confirmed from the installed package's own
+`dist/main/client/ButtplugClient.d.ts`, not just examples) also exposes
+`stopAllDevices(): Promise<void>` directly — a single call that stops every
+device the client currently knows about, rather than looping `device.stop()`
+per device by hand. Use this for our own `stopAll()`/global-panic-stop
+semantics.
+
 This maps cleanly onto our existing normalized `DeviceCommand`
 (`src/engine/types.ts`) and `DeviceCapabilities.features` list
 (`'linear' | 'vibration' | 'rotation' | 'oscillation' | 'constriction'`): a
@@ -141,6 +148,38 @@ There's no `OutputType` for our `intensity` field; it isn't a Buttplug output
 type; it should keep acting as our own cross-cutting multiplier applied
 before mapping to whichever concrete output types the device has (matches
 current `SafetyController`/algorithm behavior).
+
+## Cross-checked against a sibling project (`../stash_audio`)
+
+That repo has two independent, real Buttplug integrations worth knowing
+about before writing ours:
+
+- `Funscript-Player/src/app/service/buttplug.service.ts` (Angular) uses the
+  official `buttplug` package too, but an **older API generation**:
+  `device.vibrate(speed)` / `device.linear(pos, ms)` / `device.rotate(speed,
+  clockwise)`, `device.vibrateAttributes` / `device.messageAttributes`, and
+  `client.devices` as a plain array (`.find(...)`), not the `Map` and
+  `hasOutput`/`runOutput`/`DeviceOutput.*` builder API this doc describes for
+  `5.0.1`. This confirms the package's client API genuinely changed across
+  versions — don't copy that file's method calls; it's targeting an older
+  `buttplug` version than the one we're pinning.
+- `ui/v2.5/src/utils/buttplug.ts` (React) hand-rolls a raw WebSocket client
+  speaking the Buttplug v3 JSON wire protocol directly
+  (`RequestServerInfo`/`RequestDeviceList`/`StartScanning`/`DeviceAdded`/
+  `LinearCmd`/...), with a comment explaining why: *"Avoids an npm dep that
+  can't be installed on the VirtualBox shared filesystem."* — the same
+  vboxsf environment this project runs in.
+  - **We do not need that workaround.** `npm install --no-bin-links buttplug`
+    (2026-09-12, Node v20.19.0 from `/home/dev/.local/node20`, same
+    workaround already in use for every other dependency this session)
+    installed cleanly, and `require('buttplug')` exposes `ButtplugClient`,
+    `ButtplugBrowserWebsocketClientConnector`, `OutputType`, `DeviceOutput`,
+    and the full error hierarchy as documented above. The other team's
+    failure was most likely the plain symlink `EPERM` this project hit too
+    (see `WORK_LOG.md`'s E0-03/E1-06 entries) before we found the
+    `--no-bin-links` workaround — not something specific to the `buttplug`
+    package itself. If a fresh install ever fails here, retry with
+    `--no-bin-links` before assuming a raw-WebSocket fallback is needed.
 
 ## Sources
 
