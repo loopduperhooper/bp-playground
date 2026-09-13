@@ -50,7 +50,7 @@ Status: `not started` | `in progress` | `blocked` | `done`
 | --- | --- | --- | --- | --- |
 | E3-01 | done | Add algorithm registry and selector | E1-07 | Algorithm changes stop/reset the current pattern and create a fresh instance; available algorithms and descriptions are shown. |
 | E3-02 | done | Implement SineWave and Ramp patterns | E3-01, E1-06 | Outputs are deterministic under test inputs, normalized, resettable, and documented. |
-| E3-03 | not started | Implement RandomWalk and ClosenessAdaptive patterns | E3-01, E1-06 | Randomness is seedable in tests; closeness 1–5 behavior matches documented profiles and stays safely bounded. |
+| E3-03 | done | Implement RandomWalk and ClosenessAdaptive patterns | E3-01, E1-06 | Randomness is seedable in tests; closeness 1–5 behavior matches documented profiles and stays safely bounded. |
 | E3-04 | not started | Finish closeness, intensity, and soft-mode experience | E1-05, E3-01 | UI provides text plus non-color-only closeness feedback, history/events, visible shortcut hints, and accessible controls. |
 | E3-05 | not started | Add diagnostics and error presentation | E2-03, E3-01 | Current safe command, timestamp, transport/session state, algorithm debug values, and actionable errors are visible without exposing sensitive data. |
 
@@ -91,9 +91,11 @@ Status: `not started` | `in progress` | `blocked` | `done`
   truth for available algorithms (currently just `constant`); it derives
   each entry's id/name/description from a throwaway instance rather than
   duplicating those strings, so implementations never need to be listed
-  twice. `SineWavePattern` and `RampPattern` are implemented and registered
-  (E3-02). The next executable task is **E3-03**: implement RandomWalk and
-  ClosenessAdaptive patterns (RandomWalk needs a seedable RNG in tests —
-  use `AlgorithmInput.random`, already part of the contract but unused by
-  every pattern so far), registering each with `AlgorithmRegistry.ts`'s
-  `factories` array.
+  twice. `SineWavePattern`, `RampPattern`, `RandomWalkPattern`, and
+  `ClosenessAdaptivePattern` are all implemented and registered (E3-02,
+  E3-03) — every algorithm in the architecture brief's "Algorithm examples"
+  list is done except `CompositePattern` (item 6), which isn't on the task
+  board and isn't required by any milestone-3 task.
+- The next executable tasks are **E3-04** (finish the closeness/intensity/
+  soft-mode UI experience: non-color-only feedback, history/events,
+  accessible controls) and **E3-05** (diagnostics and error presentation).

@@ -1,6 +1,8 @@
 import type { Algorithm } from './Algorithm'
+import { ClosenessAdaptivePattern } from './implementations/ClosenessAdaptivePattern'
 import { ConstantPattern } from './implementations/ConstantPattern'
 import { RampPattern } from './implementations/RampPattern'
+import { RandomWalkPattern } from './implementations/RandomWalkPattern'
 import { SineWavePattern } from './implementations/SineWavePattern'
 
 export interface AlgorithmDescriptor {
@@ -24,6 +26,8 @@ const factories: readonly (() => Algorithm)[] = [
   () => new ConstantPattern(),
   () => new SineWavePattern(),
   () => new RampPattern(),
+  () => new RandomWalkPattern(),
+  () => new ClosenessAdaptivePattern(),
 ]
 
 const entries: readonly AlgorithmRegistryEntry[] = factories.map((create) => {

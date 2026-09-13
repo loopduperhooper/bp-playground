@@ -22,6 +22,50 @@ Template:
 
 ---
 
+## 2026-09-13 — Claude — E3-03
+
+- Status: `done`
+- Summary: Implemented `RandomWalkPattern` and `ClosenessAdaptivePattern`,
+  the last two algorithms from the architecture brief's list (besides
+  `CompositePattern`, which isn't on the task board). Both registered in
+  `AlgorithmRegistry.ts`.
+  - `RandomWalkPattern`: stateful (holds `position` across ticks, unlike
+    every prior pattern). Each tick proposes a random step via the
+    injected, seedable `AlgorithmInput.random`, clamps it to hard
+    `[minimum, maximum]` bounds, then blends it in via `smoothing` so
+    position never jumps abruptly. `reset()` returns it to `target`.
+  - `ClosenessAdaptivePattern`: combines a sine-wave base (like
+    `SineWavePattern`) with smoothed random noise (like `RandomWalkPattern`),
+    both scaled by a `profile(closeness)` function. Ships the architecture
+    brief's example `defaultClosenessProfile()` table (amplitude/
+    intensityMultiplier/variation per closeness 1–5) as the default, but the
+    profile is injectable — treated as "illustrative defaults, not
+    device-specific truths," per the brief's own wording, which the class
+    doc comment repeats verbatim so nobody mistakes the numbers for
+    calibrated hardware behavior.
+- Files changed: `src/algorithms/implementations/RandomWalkPattern.ts` (new),
+  `src/algorithms/implementations/ClosenessAdaptivePattern.ts` (new),
+  `tests/algorithms/RandomWalkPattern.test.ts` (new),
+  `tests/algorithms/ClosenessAdaptivePattern.test.ts` (new),
+  `src/algorithms/AlgorithmRegistry.ts`, `TASKS.md`.
+- Verification: ESLint passed; Vitest passed (17 files, 69 tests); `tsc -b`
+  passed; Vite production build passed; Playwright Chromium passed all 3
+  tests (unaffected by this change, re-run to confirm no regression).
+- Decisions / blockers: My first version of the "reduces to a pure sine
+  wave" `ClosenessAdaptivePattern` test asserted `0.5 + profile.amplitude`
+  for closeness 3 (amplitude 0.55) without accounting for the algorithm's
+  own `clamp(..., 0, 1)` — `0.5 + 0.55 = 1.05` gets clamped to `1`, which
+  isn't a bug in the algorithm, just a test that forgot the real clamp
+  boundary; fixed by testing at closeness 1 (amplitude 0.25) instead, where
+  the unclamped sum stays inside 0..1. Neither new pattern's constructor
+  options are exposed in the UI yet, same as E3-02's two patterns — left for
+  whenever (if ever) per-algorithm parameter controls are asked for; not
+  required by E3-03's acceptance criteria.
+- Next action: E3-04 (closeness/intensity/soft-mode UI polish — non-color
+  feedback, history/events, shortcut hints, accessible controls) or E3-05
+  (diagnostics and error presentation), both now unblocked. E2-04 remains
+  blocked pending a human with a real Intiface setup.
+
 ## 2026-09-12 — Claude — E3-02
 
 - Status: `done`
