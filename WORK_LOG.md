@@ -22,6 +22,45 @@ Template:
 
 ---
 
+## 2026-09-12 — Claude — E3-02
+
+- Status: `done`
+- Summary: Implemented `SineWavePattern` and `RampPattern`, both stateless
+  pure functions of `AlgorithmInput.elapsedMs` (no internal mutable
+  per-tick state, so `reset()` is a no-op for both — matching
+  `ConstantPattern`'s existing design). Registered both in
+  `AlgorithmRegistry.ts`'s `factories` array, the only place a new
+  algorithm needs to be listed.
+  - `SineWavePattern`: `position = baseline + amplitude * sin(2π · frequencyHz · elapsedSeconds)`,
+    clamped to 0..1; `intensity = intensityScale * manualIntensityScale`.
+  - `RampPattern`: a trapezoidal cycle — linear ramp from `minimum` to
+    `maximum` over `rampDurationMs`, hold at `maximum` for
+    `holdDurationMs`, linear ramp back down, hold at `minimum`, repeat.
+    Guards `rampDurationMs` to at least 1ms in the constructor to avoid a
+    divide-by-zero.
+- Files changed: `src/algorithms/implementations/SineWavePattern.ts` (new),
+  `src/algorithms/implementations/RampPattern.ts` (new),
+  `tests/algorithms/SineWavePattern.test.ts` (new),
+  `tests/algorithms/RampPattern.test.ts` (new),
+  `src/algorithms/AlgorithmRegistry.ts`, `TASKS.md`.
+- Verification: ESLint passed; Vitest passed (15 files, 59 tests); `tsc -b`
+  passed; Vite production build passed; Playwright Chromium passed all 3
+  tests (unaffected by this change, re-run to confirm no regression).
+- Decisions / blockers: Neither pattern currently has a UI-exposed way to
+  configure its constructor options (frequency, amplitude, ramp/hold
+  durations, etc.) — they use the documented defaults only. `App.tsx`'s
+  Pattern selector already shows each one's name/description via
+  `AlgorithmRegistry.ts` with no further changes needed, since the registry
+  reads that metadata straight off each pattern's own fields. Exposing
+  per-algorithm parameter controls in the UI isn't required by E3-02's
+  acceptance criteria and is left for whenever (if ever) it's asked for.
+- Next action: E3-03 — implement `RandomWalkPattern` (seedable via
+  `AlgorithmInput.random`, needs smoothing and hard bounds per the
+  architecture brief) and `ClosenessAdaptivePattern` (uses `closeness` to
+  modify amplitude/intensity/variation — the architecture brief's example
+  `closenessProfile()` table is a reasonable starting point), registering
+  both in `AlgorithmRegistry.ts`.
+
 ## 2026-09-12 — Claude — E2-04 (blocked), E3-01
 
 - Status: `blocked` (E2-04), `done` (E3-01)

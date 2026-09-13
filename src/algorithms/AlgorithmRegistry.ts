@@ -1,5 +1,7 @@
 import type { Algorithm } from './Algorithm'
 import { ConstantPattern } from './implementations/ConstantPattern'
+import { RampPattern } from './implementations/RampPattern'
+import { SineWavePattern } from './implementations/SineWavePattern'
 
 export interface AlgorithmDescriptor {
   readonly id: string
@@ -18,7 +20,11 @@ interface AlgorithmRegistryEntry extends AlgorithmDescriptor {
  * risks drifting from — what each implementation already declares about
  * itself.
  */
-const factories: readonly (() => Algorithm)[] = [() => new ConstantPattern()]
+const factories: readonly (() => Algorithm)[] = [
+  () => new ConstantPattern(),
+  () => new SineWavePattern(),
+  () => new RampPattern(),
+]
 
 const entries: readonly AlgorithmRegistryEntry[] = factories.map((create) => {
   const sample = create()
