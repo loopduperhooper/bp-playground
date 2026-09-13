@@ -1,3 +1,4 @@
+import { defaultAlgorithmId } from '../algorithms/AlgorithmRegistry'
 import type { Closeness, DeviceCapabilities, SessionStatus } from '../engine/types'
 
 export interface SessionState {
@@ -15,8 +16,6 @@ export const fakeDevices = [
   { id: 'vibe-1', name: 'Fake Vibration Device', capabilities: 'Vibration · stop' },
 ] as const
 
-export const algorithms = [{ id: 'constant', name: 'Constant pattern' }] as const
-
 /** Normalized capabilities backing each entry in {@link fakeDevices}, used to build the in-memory FakeTransport. */
 export const fakeDeviceCapabilities: Record<string, DeviceCapabilities> = {
   'linear-1': { features: ['linear'], minPosition: 0, maxPosition: 1, minSpeed: 0, maxSpeed: 1, supportsStop: true },
@@ -25,7 +24,7 @@ export const fakeDeviceCapabilities: Record<string, DeviceCapabilities> = {
 
 export const initialSessionState: SessionState = {
   status: 'idle',
-  selectedAlgorithmId: 'constant',
+  selectedAlgorithmId: defaultAlgorithmId,
   closeness: 1,
   intensityScale: 0.5,
   softMode: false,

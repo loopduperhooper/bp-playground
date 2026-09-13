@@ -1,22 +1,17 @@
 import { useEffect, useReducer, useRef, useState } from 'react'
 
-import type { Algorithm } from './algorithms/Algorithm'
-import { ConstantPattern } from './algorithms/implementations/ConstantPattern'
+import { algorithmDescriptors, createAlgorithm } from './algorithms/AlgorithmRegistry'
 import { FakeDeviceAdapter } from './devices/adapters/FakeDeviceAdapter'
 import { ControlEngine } from './engine/ControlEngine'
 import { InputController } from './input/InputController'
 import { SafetyController } from './safety/SafetyController'
 import { defaultSafetyPolicy } from './safety/SafetyPolicy'
-import { algorithms, fakeDeviceCapabilities, fakeDevices, initialSessionState, sessionReducer } from './state/sessionState'
+import { fakeDeviceCapabilities, fakeDevices, initialSessionState, sessionReducer } from './state/sessionState'
 import { ButtplugTransport, type ButtplugTransportDevice } from './transport/ButtplugTransport'
 import { FakeTransport } from './transport/FakeTransport'
 import './App.css'
 
 const closenessLabels = ['Far', 'Approaching', 'Close', 'Very close', 'At edge']
-
-const algorithmFactories: Record<string, () => Algorithm> = {
-  constant: () => new ConstantPattern(),
-}
 
 function createRuntime(isSoftMode: () => boolean) {
   const transport = new FakeTransport(
@@ -105,7 +100,7 @@ function App() {
     const engine = new ControlEngine(
       device,
       safety,
-      algorithmFactories[sessionRef.current.selectedAlgorithmId](),
+      createAlgorithm(sessionRef.current.selectedAlgorithmId),
       () => ({
         closeness: sessionRef.current.closeness,
         manualIntensityScale: sessionRef.current.intensityScale,
@@ -169,8 +164,7 @@ function App() {
   }
 
   const handleSelectAlgorithm = (algorithmId: string) => {
-    const factory = algorithmFactories[algorithmId]
-    if (factory) engine.setAlgorithm(factory())
+    engine.setAlgorithm(createAlgorithm(algorithmId))
     dispatch({ type: 'select-algorithm', algorithmId })
     if (running) dispatch({ type: 'toggle-run' })
   }
@@ -199,7 +193,7 @@ function App() {
       <section className="panel split"><div><h2>Connection</h2><p>Development mode uses an in-memory fake device. No hardware is contacted.</p></div><button className="secondary" onClick={() => void handleConnectToggle()}>{ready ? 'Disconnect' : 'Connect fake device'}</button></section>
       <div className="grid">
         <section className="panel"><h2>Device</h2><label>Selected device<select value={session.selectedDeviceId ?? ''} disabled={!ready || running} onChange={(event) => handleSelectDevice(event.target.value)}>{!session.selectedDeviceId && <option value="">Connect to choose</option>}{fakeDevices.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select></label><p className="hint">{fakeDevices.find((option) => option.id === session.selectedDeviceId)?.capabilities ?? '—'}</p></section>
-        <section className="panel"><h2>Algorithm</h2><label>Pattern<select value={session.selectedAlgorithmId} onChange={(event) => handleSelectAlgorithm(event.target.value)}>{algorithms.map((algorithm) => <option key={algorithm.id} value={algorithm.id}>{algorithm.name}</option>)}</select></label><p className="hint">Runs through the bounded control engine and safety layer.</p></section>
+        <section className="panel"><h2>Algorithm</h2><label>Pattern<select value={session.selectedAlgorithmId} onChange={(event) => handleSelectAlgorithm(event.target.value)}>{algorithmDescriptors.map((algorithm) => <option key={algorithm.id} value={algorithm.id}>{algorithm.name}</option>)}</select></label><p className="hint">{algorithmDescriptors.find((algorithm) => algorithm.id === session.selectedAlgorithmId)?.description ?? 'Runs through the bounded control engine and safety layer.'}</p></section>
       </div>
       <section className="panel split"><div><h2>Session</h2><p>Start is unavailable until a device is ready.</p></div><div className="buttons"><button disabled={!ready} onClick={handleToggleRun}>{running ? 'Pause' : 'Start'}</button><button className="stop" onClick={handleStopReset}>Stop &amp; reset <kbd>Esc</kbd></button></div></section>
       <section className="panel split"><div><h2>Closeness</h2><p className="closeness" aria-live="polite" data-testid="closeness-value">{session.closeness} <span>{closenessLabels[session.closeness - 1]}</span></p></div><div className="buttons" aria-label="Set closeness level">{[1, 2, 3, 4, 5].map((level) => <button className={level === session.closeness ? 'selected' : 'level'} key={level} onClick={() => dispatch({ type: 'set-closeness', closeness: level as 1 | 2 | 3 | 4 | 5 })}>{level}</button>)}</div></section>

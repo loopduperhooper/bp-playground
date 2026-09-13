@@ -42,13 +42,13 @@ Status: `not started` | `in progress` | `blocked` | `done`
 | E2-01 | done | Research and pin current Buttplug JS client API | E1-07 | Dependency/version, WebSocket endpoint configuration, discovery flow, and relevant command/capability API are documented from primary sources. Do not rely on the archived playground’s APIs. |
 | E2-02 | done | Implement isolated Buttplug/Intiface transport wrapper | E2-01 | All client-library code stays under `src/transport`; it connects, disconnects, discovers devices, and reports meaningful errors. |
 | E2-03 | done | Implement capability mapping and device adapter | E2-02 | Linear/scalar/vibration capability mapping is explicit; unsupported command fields are safely ignored or rejected; UI displays discovered capabilities. |
-| E2-04 | not started | Manually validate real-service safety behavior | E2-03 | With a local Intiface service, explicit device selection is required, connection never starts movement, and stop/disconnect/error stops the selected device. Findings and version details are logged. |
+| E2-04 | blocked | Manually validate real-service safety behavior | E2-03 | With a local Intiface service, explicit device selection is required, connection never starts movement, and stop/disconnect/error stops the selected device. Findings and version details are logged. |
 
 ## Milestone 3 — Patterns and operator controls
 
 | ID | Status | Task | Depends on | Acceptance criteria |
 | --- | --- | --- | --- | --- |
-| E3-01 | not started | Add algorithm registry and selector | E1-07 | Algorithm changes stop/reset the current pattern and create a fresh instance; available algorithms and descriptions are shown. |
+| E3-01 | done | Add algorithm registry and selector | E1-07 | Algorithm changes stop/reset the current pattern and create a fresh instance; available algorithms and descriptions are shown. |
 | E3-02 | not started | Implement SineWave and Ramp patterns | E3-01, E1-06 | Outputs are deterministic under test inputs, normalized, resettable, and documented. |
 | E3-03 | not started | Implement RandomWalk and ClosenessAdaptive patterns | E3-01, E1-06 | Randomness is seedable in tests; closeness 1–5 behavior matches documented profiles and stays safely bounded. |
 | E3-04 | not started | Finish closeness, intensity, and soft-mode experience | E1-05, E3-01 | UI provides text plus non-color-only closeness feedback, history/events, visible shortcut hints, and accessible controls. |
@@ -79,10 +79,18 @@ Status: `not started` | `in progress` | `blocked` | `done`
   Start/Pause) — its failure path is Playwright-tested for real (connecting
   to a port nothing listens on), but the success/discovery path has **not**
   been verified against a real Intiface service by anyone yet.
-- The next executable task is **E2-04**: manually validate real-service
-  safety behavior. This requires a human with a real (or simulated) Intiface
-  Central/Engine instance and cannot be completed by an agent alone — use
-  the diagnostic panel above to connect and discover devices, then confirm:
-  connecting never starts movement, explicit device selection is required,
-  and stop/disconnect/error actually stops the selected device. Log findings
-  and version details in `WORK_LOG.md`.
+- **E2-04 is blocked on a human**: it requires a real (or simulated)
+  Intiface Central/Engine instance to validate against, which does not
+  exist in this environment. Use the "Real Intiface connection (diagnostic)"
+  panel to connect and discover devices, then confirm: connecting never
+  starts movement, explicit device selection is required, and
+  stop/disconnect/error actually stops the selected device. Log findings and
+  version details in `WORK_LOG.md` when done.
+- Milestone 3 doesn't depend on E2-04, so work continues there in the
+  meantime. `src/algorithms/AlgorithmRegistry.ts` is the single source of
+  truth for available algorithms (currently just `constant`); it derives
+  each entry's id/name/description from a throwaway instance rather than
+  duplicating those strings, so implementations never need to be listed
+  twice. The next executable tasks are **E3-02**/**E3-03**: implement
+  SineWave/Ramp and RandomWalk/ClosenessAdaptive patterns, registering each
+  with `AlgorithmRegistry.ts`'s `factories` array as they're built.

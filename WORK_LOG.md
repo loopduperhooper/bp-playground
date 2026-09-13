@@ -22,6 +22,40 @@ Template:
 
 ---
 
+## 2026-09-12 — Claude — E2-04 (blocked), E3-01
+
+- Status: `blocked` (E2-04), `done` (E3-01)
+- Summary: Marked **E2-04 blocked** in `TASKS.md` — it requires a human with
+  a real (or simulated) Intiface Central/Engine instance to validate
+  against, which doesn't exist in this environment; it cannot be completed
+  by an agent alone. Since Milestone 3 doesn't depend on E2-04, moved on to
+  it: added `src/algorithms/AlgorithmRegistry.ts`, the single source of
+  truth for which algorithms exist, replacing two previously-duplicated
+  hardcoded lists (`sessionState.ts`'s `algorithms` array, `App.tsx`'s
+  `algorithmFactories` map) that could have drifted out of sync with each
+  other or with `ConstantPattern`'s own `id`/`name`/`description`. The
+  registry avoids that duplication entirely: it builds its descriptors by
+  reading those three fields off one throwaway instance per factory, rather
+  than repeating the strings a third time in registry metadata.
+  `createAlgorithm(id)` always returns a fresh instance (verified by a
+  test); `App.tsx`'s Pattern selector now shows each algorithm's real
+  description instead of a single static hint string.
+- Files changed: `src/algorithms/AlgorithmRegistry.ts` (new),
+  `tests/algorithms/AlgorithmRegistry.test.ts` (new), `src/state/sessionState.ts`
+  (removed the `algorithms` array, `initialSessionState.selectedAlgorithmId`
+  now comes from `defaultAlgorithmId`), `src/App.tsx` (removed
+  `algorithmFactories`, uses `createAlgorithm`/`algorithmDescriptors`,
+  Pattern panel's hint text is now per-algorithm), `TASKS.md`.
+- Verification: ESLint passed; Vitest passed (13 files, 48 tests); `tsc -b`
+  passed; Vite production build passed; Playwright Chromium passed all 3
+  tests (unaffected by this refactor, re-run to confirm no regression).
+- Decisions / blockers: None beyond the E2-04 human-dependency noted above.
+- Next action: E3-02/E3-03 — implement SineWave/Ramp and
+  RandomWalk/ClosenessAdaptive patterns, adding each to
+  `AlgorithmRegistry.ts`'s `factories` array as they're built (that's the
+  only place a new algorithm needs to be registered). E2-04 remains blocked
+  pending a human with a real Intiface setup.
+
 ## 2026-09-12 — Claude — E2-03
 
 - Status: `done`
