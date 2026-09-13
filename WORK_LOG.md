@@ -22,6 +22,94 @@ Template:
 
 ---
 
+## 2026-09-12 — Claude — E2-03
+
+- Status: `done`
+- Summary: Completed `ButtplugTransport` (capability computation +
+  `sendNormalizedCommand`), added `IntifaceDeviceAdapter`, and wired a
+  self-contained diagnostic panel into `App.tsx` so discovered capabilities
+  are actually visible in the UI, satisfying E2-03's stated acceptance
+  criteria.
+  - `computeCapabilities()` derives our `DeviceFeature[]` from
+    `device.hasOutput(OutputType.*)`: `Vibrate`→'vibration', `Rotate`→
+    'rotation', `Oscillate`→'oscillation', `Constrict`→'constriction', and
+    (see the important correction below) `HwPositionWithDuration`→'linear'.
+  - `buildOutputCommands()`/`sendNormalizedCommand()` map our
+    `DeviceCommand` onto `DeviceOutput.*` calls explicitly per capability:
+    `vibration ?? intensity` → `Vibrate.percent` (only if 'vibration'
+    supported; vibration wins if both are set — nothing currently sets
+    both), `speed` → `Rotate.percent` (only if 'rotation'), `position`+
+    `durationMs` → `PositionWithDuration.percent` (only if 'linear'). Fields
+    the device doesn't support are silently dropped, never sent.
+  - `IntifaceDeviceAdapter` (`src/devices/adapters/IntifaceDeviceAdapter.ts`)
+    mirrors `FakeDeviceAdapter`'s structure exactly, hardwired to
+    `ButtplugTransport`, with one real difference: `connect()` must call
+    `transport.listDevices()` (an actual scan) before `selectDevice()`,
+    since — unlike `FakeTransport` — real devices aren't known until
+    discovered.
+  - `App.tsx` gained a "Real Intiface connection (diagnostic)" panel
+    (`useIntifaceDiagnostics()`): a URL input, connect/discover, disconnect,
+    a status message, and a list of discovered devices with their mapped
+    capabilities. It is intentionally **not** wired into the existing
+    fake-device session/engine/Start-Pause flow — see Decisions below.
+- Files changed: `src/transport/ButtplugTransport.ts`,
+  `src/devices/adapters/IntifaceDeviceAdapter.ts` (new),
+  `tests/devices/IntifaceDeviceAdapter.test.ts` (new),
+  `tests/transport/ButtplugTransport.test.ts` (added a `sendNormalizedCommand`
+  describe block, updated device fixtures to include
+  `hasOutput`/`hasInput`/`runOutput`), `src/App.tsx`,
+  `tests/e2e/app.spec.ts` (added a real-connection-failure test; made the
+  original "Disconnect" locator `exact: true` since the app now has two
+  buttons whose text contains that word), `BUTTPLUG_API_NOTES.md`, `TASKS.md`.
+- Verification: ESLint passed; Vitest passed (12 files, 44 tests); `tsc -b`
+  passed; Vite production build passed (73 modules — confirms `buttplug`
+  bundles cleanly for the browser via Vite, not just Node); Playwright
+  Chromium passed all 3 tests, including the new one that drives
+  `ButtplugTransport.connect()` against a real WebSocket connection to a
+  port nothing listens on in this environment, and asserts the UI surfaces
+  the real wrapped error message.
+- Decisions / blockers: **Found and fixed a real capability-mapping bug via
+  a failing test, not by inspection**: `DeviceOutput.PositionWithDuration`
+  and `DeviceOutput.HwPositionWithDuration` are the exact same constructor
+  in the installed `buttplug@5.0.1` (confirmed by reading the compiled
+  `.js`, not just the `.d.ts`) — both always produce an
+  `OutputType.HwPositionWithDuration` command. Plain `OutputType.Position`
+  is a separate output type with no duration-taking variant. My first
+  version of `computeCapabilities()` checked `hasOutput(OutputType.Position)`
+  for 'linear', which would have silently misreported linear support for
+  any device that only declares `HwPositionWithDuration` (seemingly the
+  common real case) — fixed to check `HwPositionWithDuration`, matching
+  what we actually send. Recorded in `BUTTPLUG_API_NOTES.md` so this isn't
+  rediscovered the hard way again.
+  Deliberately did **not** rewire the main session/engine/Start-Pause flow
+  to support a fake-vs-real mode switch: that would have meant reworking
+  `App.tsx`'s runtime-construction model (currently a `FakeTransport`+
+  `FakeDeviceAdapter` pair built once via lazy `useRef` at mount) into
+  something that can hot-swap to `ButtplugTransport`+`IntifaceDeviceAdapter`
+  — a real architectural change I cannot verify end-to-end without a live
+  Intiface service, which does not exist in this environment. Building that
+  untested would risk quietly breaking the already-solid, tested fake-device
+  UX to add a feature I can't confirm works. Instead, added an isolated
+  diagnostic panel that exercises the real transport for real (its connect/
+  discover/disconnect calls are the actual production code, not a mock) but
+  doesn't touch the existing session engine at all. Its *failure* path is
+  genuinely verified (Playwright drives a real failed WebSocket connection);
+  its *success* path (discovering an actual device) has only ever run
+  against scripted fakes in unit tests — nobody has confirmed it against a
+  real Intiface Central yet. That confirmation, plus deciding how (or
+  whether) to merge this into the main session flow, is explicitly E2-04's
+  job and needs a human with real hardware/software; I flagged this clearly
+  rather than claiming the feature fully works.
+- Next action: **E2-04 requires a human** — it cannot be completed by an
+  agent alone. With a local Intiface Central/Engine (and ideally a real or
+  simulated device) running, use the "Real Intiface connection (diagnostic)"
+  panel to connect and discover devices, and confirm: connecting never
+  starts device movement, explicit device selection is required before any
+  command, and stop/disconnect/error conditions actually stop the selected
+  device. Record findings, the Intiface Central/Engine version used, and
+  whatever needs fixing (very possibly including "wire the diagnostic panel
+  into the main session flow" as a follow-up task) in this log.
+
 ## 2026-09-12 — Claude — E2-02
 
 - Status: `done`

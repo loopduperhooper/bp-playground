@@ -135,6 +135,26 @@ device the client currently knows about, rather than looping `device.stop()`
 per device by hand. Use this for our own `stopAll()`/global-panic-stop
 semantics.
 
+**Quirk confirmed by reading the compiled source
+(`dist/main/client/ButtplugClientDeviceCommand.js`), not just the `.d.ts`:**
+`DeviceOutput.PositionWithDuration` and `DeviceOutput.HwPositionWithDuration`
+are the exact same constructor — both *always* produce a command whose
+`outputType` is `OutputType.HwPositionWithDuration`, regardless of which
+name you called. Plain `OutputType.Position` (no duration) is a **separate,
+distinct** output type that `DeviceOutput.Position.percent(p)` produces
+instead — there is no duration-taking variant of it. Since this project's
+`DeviceCommand` always pairs `position` with an (optional) `durationMs`, our
+`'linear'` `DeviceFeature` must be detected via
+`device.hasOutput(OutputType.HwPositionWithDuration)`, **not**
+`OutputType.Position` — checking the latter would silently misreport
+'linear' support for devices that only declare the "Hw" variant (the
+apparently-common real case, going by the `-WithDuration` builder being the
+one prominently documented in the `examples/web/*.js` files from E2-01).
+Found this via a test that asserted the wrong `outputType` and failed
+against the real enum values — a good example of why capability mapping
+needs to be checked against the actual installed package, not just
+inferred from examples.
+
 This maps cleanly onto our existing normalized `DeviceCommand`
 (`src/engine/types.ts`) and `DeviceCapabilities.features` list
 (`'linear' | 'vibration' | 'rotation' | 'oscillation' | 'constriction'`): a

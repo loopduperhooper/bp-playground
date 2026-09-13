@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useRef } from 'react'
+import { useEffect, useReducer, useRef, useState } from 'react'
 
 import type { Algorithm } from './algorithms/Algorithm'
 import { ConstantPattern } from './algorithms/implementations/ConstantPattern'
@@ -8,6 +8,7 @@ import { InputController } from './input/InputController'
 import { SafetyController } from './safety/SafetyController'
 import { defaultSafetyPolicy } from './safety/SafetyPolicy'
 import { algorithms, fakeDeviceCapabilities, fakeDevices, initialSessionState, sessionReducer } from './state/sessionState'
+import { ButtplugTransport, type ButtplugTransportDevice } from './transport/ButtplugTransport'
 import { FakeTransport } from './transport/FakeTransport'
 import './App.css'
 
@@ -36,10 +37,59 @@ function createRuntime(isSoftMode: () => boolean) {
   return { transport, device, safety }
 }
 
+type IntifaceDiagnosticsStatus = 'idle' | 'connecting' | 'connected' | 'error'
+
+/**
+ * A self-contained diagnostic panel for the real Intiface transport,
+ * independent of the fake-device session/engine above. It only connects,
+ * discovers, and disconnects — it does not drive Start/Pause. Wiring a real
+ * connection into the main session flow, and validating it against a real
+ * Intiface service, is future work (see TASKS.md E2-04); this cannot be
+ * verified against real hardware in this environment.
+ */
+function useIntifaceDiagnostics() {
+  const [url, setUrl] = useState('ws://127.0.0.1:12345')
+  const [status, setStatus] = useState<IntifaceDiagnosticsStatus>('idle')
+  const [message, setMessage] = useState('')
+  const [devices, setDevices] = useState<readonly ButtplugTransportDevice[]>([])
+  const transportRef = useRef<ButtplugTransport | null>(null)
+
+  useEffect(() => () => void transportRef.current?.disconnect().catch(() => {}), [])
+
+  const connect = async () => {
+    setStatus('connecting')
+    setMessage('')
+    const transport = new ButtplugTransport(url)
+    transportRef.current = transport
+
+    try {
+      await transport.connect()
+      const found = await transport.listDevices()
+      setDevices(found)
+      setStatus('connected')
+      setMessage(found.length === 0 ? 'Connected. No devices found — turn one on and reconnect.' : `Connected. Found ${found.length} device(s).`)
+    } catch (error) {
+      setStatus('error')
+      setMessage(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  const disconnect = async () => {
+    await transportRef.current?.disconnect().catch(() => {})
+    transportRef.current = null
+    setStatus('idle')
+    setDevices([])
+    setMessage('')
+  }
+
+  return { url, setUrl, status, message, devices, connect, disconnect }
+}
+
 function App() {
   const [session, dispatch] = useReducer(sessionReducer, initialSessionState)
   const ready = session.status === 'ready' || session.status === 'running'
   const running = session.status === 'running'
+  const intiface = useIntifaceDiagnostics()
 
   const sessionRef = useRef(session)
   sessionRef.current = session
@@ -154,6 +204,21 @@ function App() {
       <section className="panel split"><div><h2>Session</h2><p>Start is unavailable until a device is ready.</p></div><div className="buttons"><button disabled={!ready} onClick={handleToggleRun}>{running ? 'Pause' : 'Start'}</button><button className="stop" onClick={handleStopReset}>Stop &amp; reset <kbd>Esc</kbd></button></div></section>
       <section className="panel split"><div><h2>Closeness</h2><p className="closeness" aria-live="polite" data-testid="closeness-value">{session.closeness} <span>{closenessLabels[session.closeness - 1]}</span></p></div><div className="buttons" aria-label="Set closeness level">{[1, 2, 3, 4, 5].map((level) => <button className={level === session.closeness ? 'selected' : 'level'} key={level} onClick={() => dispatch({ type: 'set-closeness', closeness: level as 1 | 2 | 3 | 4 | 5 })}>{level}</button>)}</div></section>
       <section className="panel intensity"><label><span>Intensity scale</span><output>{Math.round(session.intensityScale * 100)}%</output><input max="1" min="0" onChange={(event) => dispatch({ type: 'set-intensity', intensityScale: Number(event.target.value) })} step="0.05" type="range" value={session.intensityScale} /></label><label className="check"><input checked={session.softMode} onChange={() => dispatch({ type: 'toggle-soft-mode' })} type="checkbox" />Soft mode</label></section>
+      <section className="panel">
+        <h2>Real Intiface connection (diagnostic)</h2>
+        <p className="hint">Connects to a real Intiface/Buttplug server to discover devices and their capabilities. Does not yet drive Start/Pause above.</p>
+        <label>Server URL<input type="text" value={intiface.url} disabled={intiface.status === 'connecting' || intiface.status === 'connected'} onChange={(event) => intiface.setUrl(event.target.value)} /></label>
+        <div className="buttons">
+          <button className="secondary" disabled={intiface.status === 'connecting' || intiface.status === 'connected'} onClick={() => void intiface.connect()}>Connect &amp; discover</button>
+          <button className="secondary" disabled={intiface.status !== 'connected'} onClick={() => void intiface.disconnect()}>Disconnect Intiface</button>
+        </div>
+        {intiface.message && <p className="hint" data-testid="intiface-message">{intiface.message}</p>}
+        {intiface.devices.length > 0 && (
+          <ul data-testid="intiface-devices">
+            {intiface.devices.map((found) => <li key={found.index}>{found.name} — {found.capabilities.features.join(', ') || 'no known outputs'}</li>)}
+          </ul>
+        )}
+      </section>
       <aside className="event" aria-live="polite"><strong>Session event</strong><span>{session.lastEvent}</span></aside>
       <p className="shortcut-help">Keyboard: Space start/pause · Esc stop/reset · A/D intensity · [ / ] closeness · R reset</p>
     </main>

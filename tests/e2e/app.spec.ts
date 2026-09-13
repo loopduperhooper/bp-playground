@@ -34,6 +34,17 @@ test('connects, starts, adjusts closeness/intensity, and stops via Escape', asyn
   await expect(page.getByTestId('closeness-value')).toContainText('1')
   await expect(intensity).toHaveText('50%')
 
-  await page.getByRole('button', { name: 'Disconnect' }).click()
+  await page.getByRole('button', { name: 'Disconnect', exact: true }).click()
   await expect(status).toHaveText('idle')
+})
+
+test('reports a real connection failure from the Intiface diagnostic panel', async ({ page }) => {
+  await page.goto('/')
+
+  // Nothing listens on this port in the test environment, so this exercises
+  // ButtplugTransport's real WebSocket connect-failure path end to end.
+  await page.getByRole('button', { name: 'Connect & discover' }).click()
+
+  await expect(page.getByTestId('intiface-message')).toContainText('Failed to connect to Intiface at ws://127.0.0.1:12345')
+  await expect(page.getByTestId('intiface-devices')).toHaveCount(0)
 })
