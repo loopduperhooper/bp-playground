@@ -55,4 +55,21 @@ describe('InputController', () => {
     input.remove()
     controller.detach()
   })
+
+  it('still fires global shortcuts while a plain button has focus', () => {
+    const actions: KeyboardActions = {
+      stopReset: vi.fn(), startPause: vi.fn(), intensityDown: vi.fn(), intensityUp: vi.fn(),
+      closenessDown: vi.fn(), closenessUp: vi.fn(), resetSession: vi.fn(),
+    }
+    const controller = new InputController(actions)
+    controller.attach()
+    const button = document.createElement('button')
+    document.body.append(button)
+    button.focus()
+    button.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: ' ' }))
+
+    expect(actions.startPause).toHaveBeenCalledOnce()
+    button.remove()
+    controller.detach()
+  })
 })

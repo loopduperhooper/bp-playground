@@ -33,7 +33,7 @@ Status: `not started` | `in progress` | `blocked` | `done`
 | E1-04 | done | Implement ConstantPattern and control engine | E1-01, E1-02 | ConstantPattern and bounded-cadence engine emit only while running, clamp delta time, stop on errors, and reset cleanly; deterministic tests pass. |
 | E1-05 | done | Add global keyboard controller | E1-03, E1-04 | Space, Escape, A/D, [, ], R work outside editable controls; Escape is one-shot, idempotent, cancels the engine, sends stop, and requires a fresh Start. |
 | E1-06 | done | Build the safety layer and command limiter | E1-02, E1-04 | Safety clamps normalized/device limits, applies soft mode, rate-limits commands, rejects non-ready sends, and stops on command errors. Tests cover each policy. |
-| E1-07 | not started | Verify milestone-1 vertical slice | E1-03–E1-06 | Fake-device integration and browser smoke tests cover connect → select → start → closeness/input → Escape reset. |
+| E1-07 | done | Verify milestone-1 vertical slice | E1-03–E1-06 | Fake-device integration and browser smoke tests cover connect → select → start → closeness/input → Escape reset. |
 
 ## Milestone 2 — Intiface integration
 
@@ -69,7 +69,6 @@ Status: `not started` | `in progress` | `blocked` | `done`
 - `intiface/buttplug-playground` is useful for testing-UI ideas, but it is an
   archived Vue application. Use it as a behavioral reference only; do not
   copy its aging dependency choices or make it the foundation of this project.
-- The next executable task is **E1-07**: wire `SafetyController` + `ControlEngine`
-  + `FakeDeviceAdapter` into `App.tsx` (Start/Pause/Escape currently only touch
-  UI session state) and extend the Playwright smoke test to cover
-  connect → select → start → closeness/input → Escape reset.
+- The next executable task is **E2-01**: research and pin the current Buttplug
+  JS client API from primary sources (the archived `buttplug-playground` is a
+  behavioral reference only, not an API source).

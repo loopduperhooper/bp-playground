@@ -1,4 +1,4 @@
-import type { Closeness, SessionStatus } from '../engine/types'
+import type { Closeness, DeviceCapabilities, SessionStatus } from '../engine/types'
 
 export interface SessionState {
   status: SessionStatus
@@ -16,6 +16,12 @@ export const fakeDevices = [
 ] as const
 
 export const algorithms = [{ id: 'constant', name: 'Constant pattern' }] as const
+
+/** Normalized capabilities backing each entry in {@link fakeDevices}, used to build the in-memory FakeTransport. */
+export const fakeDeviceCapabilities: Record<string, DeviceCapabilities> = {
+  'linear-1': { features: ['linear'], minPosition: 0, maxPosition: 1, minSpeed: 0, maxSpeed: 1, supportsStop: true },
+  'vibe-1': { features: ['vibration'], minIntensity: 0, maxIntensity: 1, supportsStop: true },
+}
 
 export const initialSessionState: SessionState = {
   status: 'idle',

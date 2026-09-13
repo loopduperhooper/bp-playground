@@ -22,6 +22,53 @@ Template:
 
 ---
 
+## 2026-09-12 — Claude — E1-07
+
+- Status: `done`
+- Summary: Wired `SafetyController` + `ControlEngine` + `FakeDeviceAdapter` +
+  `FakeTransport` into `App.tsx`. Connect/Disconnect, device selection,
+  algorithm selection, Start/Pause, and Stop & reset now drive the real
+  engine instead of only flipping UI session state; closeness/intensity/soft
+  mode already flowed into the engine's `getInput`/`isSoftMode` callbacks via
+  a `sessionRef` kept current every render. Runtime objects (transport,
+  device, engine) are created once per mount via a lazy `useRef` so they
+  survive re-renders; the keyboard-controller effect now also depends on
+  `session.status` so its closures stay correct across start/stop.
+- Files changed: `src/App.tsx` (full wiring rewrite), `src/state/sessionState.ts`
+  (added `fakeDeviceCapabilities`, the real `DeviceCapabilities` backing each
+  fake device, used to construct the `FakeTransport`), `tests/e2e/app.spec.ts`
+  (extended smoke test to also cover connect → select device → start →
+  closeness/intensity via keyboard → Escape reset → disconnect), and
+  `TASKS.md`.
+- Verification: ESLint passed; Vitest passed (10 files, 24 tests); `tsc -b`
+  passed; Vite production build passed; Playwright Chromium passed both
+  tests (shell load + full flow).
+- Decisions / blockers: **Found and fixed a real bug while writing the
+  browser flow test**, not a test-environment issue: `InputController`'s
+  `isEditableTarget` (from E1-05) included `'button'` in its editable-tag
+  exclusion list. Since a clicked `<button>` keeps browser focus after the
+  click, this meant every global shortcut (Space, Escape, A/D, [/], R) went
+  silently dead as soon as the user clicked *any* button in the app —
+  including the app's own Start/Stop buttons — which defeats the purpose of
+  hands-off global shortcuts on a safety-critical control surface. Removed
+  `'button'` from that list in `src/input/InputController.ts`; `preventDefault()`
+  on the shortcut keydown already suppresses the browser's native
+  space-bar-activates-focused-button behavior, so no double-firing. Added a
+  regression test (`tests/input/InputController.test.ts`, "still fires global
+  shortcuts while a plain button has focus") so this can't silently regress
+  again. Kept "Pause" as a plain engine stop (not a suspend/resume) and
+  reserved a full resume-in-place behavior for later if ever needed — not
+  required by any current acceptance criterion. Switching the selected
+  device is only allowed while `ready` and not `running`, to avoid needing
+  to define hot-swap-mid-session safety semantics before Milestone 2 exists.
+  Environment notes from the E1-06 entry below still apply unchanged (Node 20
+  standalone toolchain, `--no-bin-links`, pinned `jsdom@27.4.0`, and the
+  `/home/dev/.local/edger-bin/vite` shim for Playwright's `webServer`).
+- Next action: Begin Milestone 2 with **E2-01** — research and pin the
+  current Buttplug JS client API (dependency/version, WebSocket endpoint
+  configuration, discovery flow, relevant command/capability API) from
+  primary sources; do not rely on the archived `buttplug-playground`'s APIs.
+
 ## 2026-09-12 — Claude — E1-06
 
 - Status: `done`

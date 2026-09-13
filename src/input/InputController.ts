@@ -13,7 +13,7 @@ const oneShotKeys = new Set(['Escape', ' ', 'r', 'R'])
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false
 
-  return target.isContentEditable || ['input', 'textarea', 'select', 'button'].includes(target.tagName.toLowerCase())
+  return target.isContentEditable || ['input', 'textarea', 'select'].includes(target.tagName.toLowerCase())
 }
 
 /** Maps the safety-focused global keyboard shortcuts to session actions. */
