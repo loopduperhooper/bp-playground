@@ -19,8 +19,6 @@ describe('sessionReducer', () => {
     expect(reset).toMatchObject({
       status: 'ready',
       closeness: 1,
-      intensityScale: 0.5,
-      softMode: false,
     })
   })
 
@@ -35,7 +33,6 @@ describe('sessionReducer', () => {
       status: 'ready',
       selectedDeviceId: connected.selectedDeviceId,
       closeness: 1,
-      intensityScale: 0.5,
     })
   })
 })

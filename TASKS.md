@@ -112,6 +112,27 @@ Status: `not started` | `in progress` | `blocked` | `done`
   `aria-pressed`/`aria-label`/`role="group"`/`aria-valuetext` to the
   closeness buttons, run toggle, and intensity slider. Closeness/status
   feedback was already text-first (not color-only); no change needed there.
+- **Product decision (2026-09-13), supersedes part of E1-03/E1-05**:
+  closeness is the *only* live/realtime control this app exposes now.
+  Intensity and soft mode are no longer live UI — they're pre-configured
+  (fixed constants in `App.tsx`: `manualIntensityScale = 1`,
+  `softModeEnabled = false`) rather than session-state fields; any other
+  per-run tuning happens via an algorithm's own (pre-configured)
+  constructor options, not a runtime control. The intensity slider and
+  soft-mode checkbox were removed from `App.tsx`/`App.css`. Keyboard
+  shortcuts changed accordingly: `A`/`D` now move closeness up/down
+  (previously intensity); `[`/`]` (closeness) and the old `A`/`D`
+  (intensity) bindings are gone — there is one canonical binding per
+  action now. `Space`/`Esc` are unchanged (explicitly requested to stay as
+  they were). `SessionState.intensityScale`/`softMode` and the
+  `set-intensity`/`toggle-soft-mode` actions were removed from
+  `sessionState.ts`; `InputController`'s `intensityDown`/`intensityUp`
+  actions were removed, replaced by reusing `closenessDown`/`closenessUp`
+  for the `A`/`D` keys. E1-03's and E1-05's table rows above describe what
+  was originally built and aren't rewritten (see `WORK_LOG.md` for the
+  historical record), but they no longer describe current behavior for the
+  intensity/soft-mode/bracket-key parts — this note is the current source
+  of truth for that.
 - The next executable task is **E3-05** (diagnostics and error
   presentation). E2-04 remains open pending the safety-behavior checks
   above.

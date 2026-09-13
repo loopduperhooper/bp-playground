@@ -13,6 +13,15 @@ import './App.css'
 
 const closenessLabels = ['Far', 'Approaching', 'Close', 'Very close', 'At edge']
 
+/**
+ * Soft mode and intensity are pre-configured, not live UI controls — the
+ * only realtime feedback/input this app exposes is closeness. Soft mode
+ * fixed off; intensity fixed at full scale so each algorithm's own
+ * (pre-configured) parameters are the sole intensity lever.
+ */
+const softModeEnabled = false
+const manualIntensityScale = 1
+
 const eventTimeFormatter = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
 /** Renders an event-log timestamp as a local wall-clock time; falls back to a placeholder for the seeded `at: 0` entry. */
@@ -103,14 +112,14 @@ function App() {
   } | null>(null)
 
   if (!runtimeRef.current) {
-    const { transport, device, safety } = createRuntime(() => sessionRef.current.softMode)
+    const { transport, device, safety } = createRuntime(() => softModeEnabled)
     const engine = new ControlEngine(
       device,
       safety,
       createAlgorithm(sessionRef.current.selectedAlgorithmId),
       () => ({
         closeness: sessionRef.current.closeness,
-        manualIntensityScale: sessionRef.current.intensityScale,
+        manualIntensityScale,
         isRunning: sessionRef.current.status === 'running',
         random: Math.random,
       }),
@@ -140,8 +149,6 @@ function App() {
         }
         dispatch({ type: 'toggle-run' })
       },
-      intensityDown: () => dispatch({ type: 'set-intensity', intensityScale: Math.max(0, session.intensityScale - 0.05) }),
-      intensityUp: () => dispatch({ type: 'set-intensity', intensityScale: Math.min(1, session.intensityScale + 0.05) }),
       closenessDown: () => dispatch({ type: 'set-closeness', closeness: Math.max(1, session.closeness - 1) as 1 | 2 | 3 | 4 | 5 }),
       closenessUp: () => dispatch({ type: 'set-closeness', closeness: Math.min(5, session.closeness + 1) as 1 | 2 | 3 | 4 | 5 }),
       resetSession: () => {
@@ -151,7 +158,7 @@ function App() {
     })
     controller.attach()
     return () => controller.detach()
-  }, [session.closeness, session.intensityScale, session.status, engine])
+  }, [session.closeness, session.status, engine])
 
   const handleConnectToggle = async () => {
     if (ready) {
@@ -203,8 +210,7 @@ function App() {
         <section className="panel"><h2>Algorithm</h2><label>Pattern<select value={session.selectedAlgorithmId} onChange={(event) => handleSelectAlgorithm(event.target.value)}>{algorithmDescriptors.map((algorithm) => <option key={algorithm.id} value={algorithm.id}>{algorithm.name}</option>)}</select></label><p className="hint">{algorithmDescriptors.find((algorithm) => algorithm.id === session.selectedAlgorithmId)?.description ?? 'Runs through the bounded control engine and safety layer.'}</p></section>
       </div>
       <section className="panel split"><div><h2>Session</h2><p>Start is unavailable until a device is ready.</p></div><div className="buttons"><button disabled={!ready} aria-pressed={running} onClick={handleToggleRun}>{running ? 'Pause' : 'Start'} <kbd>Space</kbd></button><button className="stop" onClick={handleStopReset}>Stop &amp; reset <kbd>Esc</kbd></button></div></section>
-      <section className="panel split"><div><h2>Closeness <kbd>[</kbd> <kbd>]</kbd></h2><p className="closeness" aria-live="polite" data-testid="closeness-value">{session.closeness} <span>{closenessLabels[session.closeness - 1]}</span></p></div><div className="buttons" role="group" aria-label="Set closeness level">{[1, 2, 3, 4, 5].map((level) => <button className={level === session.closeness ? 'selected' : 'level'} aria-pressed={level === session.closeness} aria-label={`Closeness ${level}: ${closenessLabels[level - 1]}`} key={level} onClick={() => dispatch({ type: 'set-closeness', closeness: level as 1 | 2 | 3 | 4 | 5 })}>{level}</button>)}</div></section>
-      <section className="panel intensity"><label><span>Intensity scale <kbd>A</kbd> <kbd>D</kbd></span><output htmlFor="intensity-range">{Math.round(session.intensityScale * 100)}%</output><input id="intensity-range" max="1" min="0" aria-valuetext={`${Math.round(session.intensityScale * 100)}%`} onChange={(event) => dispatch({ type: 'set-intensity', intensityScale: Number(event.target.value) })} step="0.05" type="range" value={session.intensityScale} /></label><label className="check"><input checked={session.softMode} onChange={() => dispatch({ type: 'toggle-soft-mode' })} type="checkbox" />Soft mode</label></section>
+      <section className="panel split"><div><h2>Closeness <kbd>A</kbd> <kbd>D</kbd></h2><p className="closeness" aria-live="polite" data-testid="closeness-value">{session.closeness} <span>{closenessLabels[session.closeness - 1]}</span></p></div><div className="buttons" role="group" aria-label="Set closeness level">{[1, 2, 3, 4, 5].map((level) => <button className={level === session.closeness ? 'selected' : 'level'} aria-pressed={level === session.closeness} aria-label={`Closeness ${level}: ${closenessLabels[level - 1]}`} key={level} onClick={() => dispatch({ type: 'set-closeness', closeness: level as 1 | 2 | 3 | 4 | 5 })}>{level}</button>)}</div></section>
       <section className="panel">
         <h2>Real Intiface connection (diagnostic)</h2>
         <p className="hint">Connects to a real Intiface/Buttplug server to discover devices and their capabilities. Does not yet drive Start/Pause above.</p>
@@ -231,7 +237,7 @@ function App() {
           ))}
         </ol>
       </aside>
-      <p className="shortcut-help">Keyboard: <kbd>Space</kbd> start/pause · <kbd>Esc</kbd> stop/reset · <kbd>A</kbd>/<kbd>D</kbd> intensity · <kbd>[</kbd>/<kbd>]</kbd> closeness · <kbd>R</kbd> reset</p>
+      <p className="shortcut-help">Keyboard: <kbd>Space</kbd> start/pause · <kbd>Esc</kbd> stop/reset · <kbd>A</kbd>/<kbd>D</kbd> closeness · <kbd>R</kbd> reset</p>
     </main>
   )
 }

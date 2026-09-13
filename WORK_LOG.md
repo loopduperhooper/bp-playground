@@ -22,6 +22,66 @@ Template:
 
 ---
 
+## 2026-09-13 — Claude — product decision (supersedes part of E1-03/E1-05)
+
+- Status: `done`
+- Summary: User requested feature changes to simplify the live control
+  surface: remove the intensity slider entirely, repoint `A`/`D` (freed up
+  by removing intensity) to move the closeness meter instead of `[`/`]`,
+  and confirmed closeness is meant to be the *only* realtime
+  feedback/control in the UI — everything else is pre-configured on an
+  algorithm before the session runs. Also asked about moving Stop from
+  `Esc` to `Space`, but after discussing the Start/Pause conflict that
+  would create, explicitly said to leave `Space`/`Esc` as they are and
+  move on — no keybinding change there.
+  - `src/state/sessionState.ts`: removed `intensityScale`/`softMode` from
+    `SessionState` and the `set-intensity`/`toggle-soft-mode` actions;
+    `stop-reset`/`reset-session` no longer reset those (nothing to reset).
+  - `src/input/InputController.ts`: removed `intensityDown`/`intensityUp`
+    from `KeyboardActions`; `a`/`A` and `d`/`D` now resolve to
+    `closenessDown`/`closenessUp` (previously `[`/`]`, now removed —
+    closeness has one canonical binding, not two).
+  - `src/App.tsx`: removed the intensity-slider/soft-mode panel entirely;
+    added two fixed module-level constants (`manualIntensityScale = 1`,
+    `softModeEnabled = false`) feeding the engine/safety layer where
+    session state used to; updated the Closeness heading's `<kbd>` hint
+    and the footer shortcut legend from `[`/`]`+"intensity" to `A`/`D`.
+  - `src/App.css`: removed now-dead `.intensity`/`.check` rules and the
+    `.intensity` entries in the flex/media-query selector lists.
+  - Updated `tests/state/sessionState.test.ts` (dropped
+    `intensityScale`/`softMode` from `toMatchObject` expectations),
+    `tests/input/InputController.test.ts` (dropped the two removed actions
+    from the mock and from the key-dispatch assertions), and
+    `tests/e2e/app.spec.ts` (renamed the test, dropped the `.intensity
+    output` checks, swapped `]` for `d` and added an `a` press to exercise
+    closeness down too).
+  - `TASKS.md`: added a "Product decision" note under Milestone 3's
+    reference notes explaining this supersedes part of E1-03/E1-05's
+    original acceptance criteria (those table rows are left as a
+    historical record, not rewritten).
+- Files changed: `src/state/sessionState.ts`, `src/input/InputController.ts`,
+  `src/App.tsx`, `src/App.css`, `tests/state/sessionState.test.ts`,
+  `tests/input/InputController.test.ts`, `tests/e2e/app.spec.ts`,
+  `TASKS.md`.
+- Verification: same sandbox constraints as the E3-04 entry below (empty
+  `node_modules/.bin`, Node 18.19.1 vs required 20.19+) — same
+  workarounds used.
+  - ESLint (`node node_modules/eslint/bin/eslint.js .`): clean.
+  - `tsc -b`: clean.
+  - Vite production build: succeeded (78 modules transformed).
+  - Playwright (manually started dev server + direct CLI invocation, as
+    before): all 3 tests passed, including the renamed/updated closeness
+    test (`d` → closeness 2/Approaching, `a` → back to 1/Far, `d` then
+    `Escape` → resets to 1).
+  - Vitest: still cannot run in this sandbox (see E3-04 entry) — the
+    `sessionReducer`/`InputController` unit-test edits above are unverified
+    by an actual test run here; re-run `npm run test` on Node 20.19+ to
+    confirm.
+- Decisions / blockers: None new. Space/Esc explicitly stay as-is per the
+  user's own follow-up — do not revisit that rebinding unless asked again.
+- Next action: E3-05 (diagnostics and error presentation) is still the
+  next executable task; nothing about it changes as a result of this.
+
 ## 2026-09-13 — Claude — E3-04
 
 - Status: `done`

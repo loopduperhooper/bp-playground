@@ -1,8 +1,6 @@
 export interface KeyboardActions {
   stopReset(): void
   startPause(): void
-  intensityDown(): void
-  intensityUp(): void
   closenessDown(): void
   closenessUp(): void
   resetSession(): void
@@ -48,11 +46,9 @@ export class InputController {
       case 'Escape': return this.actions.stopReset
       case ' ': return this.actions.startPause
       case 'a':
-      case 'A': return this.actions.intensityDown
+      case 'A': return this.actions.closenessDown
       case 'd':
-      case 'D': return this.actions.intensityUp
-      case '[': return this.actions.closenessDown
-      case ']': return this.actions.closenessUp
+      case 'D': return this.actions.closenessUp
       case 'r':
       case 'R': return this.actions.resetSession
       default: return undefined

@@ -11,7 +11,7 @@ function dispatchKey(key: string, options: KeyboardEventInit = {}): KeyboardEven
 describe('InputController', () => {
   it('maps global shortcuts and prevents their browser defaults', () => {
     const actions: KeyboardActions = {
-      stopReset: vi.fn(), startPause: vi.fn(), intensityDown: vi.fn(), intensityUp: vi.fn(),
+      stopReset: vi.fn(), startPause: vi.fn(),
       closenessDown: vi.fn(), closenessUp: vi.fn(), resetSession: vi.fn(),
     }
     const controller = new InputController(actions)
@@ -21,14 +21,10 @@ describe('InputController', () => {
     dispatchKey(' ')
     dispatchKey('A')
     dispatchKey('d')
-    dispatchKey('[')
-    dispatchKey(']')
     dispatchKey('R')
 
     expect(actions.stopReset).toHaveBeenCalledOnce()
     expect(actions.startPause).toHaveBeenCalledOnce()
-    expect(actions.intensityDown).toHaveBeenCalledOnce()
-    expect(actions.intensityUp).toHaveBeenCalledOnce()
     expect(actions.closenessDown).toHaveBeenCalledOnce()
     expect(actions.closenessUp).toHaveBeenCalledOnce()
     expect(actions.resetSession).toHaveBeenCalledOnce()
@@ -37,7 +33,7 @@ describe('InputController', () => {
 
   it('ignores shortcuts in editable controls and repeat one-shot commands', () => {
     const actions: KeyboardActions = {
-      stopReset: vi.fn(), startPause: vi.fn(), intensityDown: vi.fn(), intensityUp: vi.fn(),
+      stopReset: vi.fn(), startPause: vi.fn(),
       closenessDown: vi.fn(), closenessUp: vi.fn(), resetSession: vi.fn(),
     }
     const controller = new InputController(actions)
@@ -58,7 +54,7 @@ describe('InputController', () => {
 
   it('still fires global shortcuts while a plain button has focus', () => {
     const actions: KeyboardActions = {
-      stopReset: vi.fn(), startPause: vi.fn(), intensityDown: vi.fn(), intensityUp: vi.fn(),
+      stopReset: vi.fn(), startPause: vi.fn(),
       closenessDown: vi.fn(), closenessUp: vi.fn(), resetSession: vi.fn(),
     }
     const controller = new InputController(actions)

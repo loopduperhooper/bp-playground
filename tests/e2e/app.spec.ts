@@ -6,7 +6,7 @@ test('loads the Edger application shell', async ({ page }) => {
   await expect(page).toHaveTitle('Edger')
 })
 
-test('connects, starts, adjusts closeness/intensity, and stops via Escape', async ({ page }) => {
+test('connects, starts, adjusts closeness, and stops via Escape', async ({ page }) => {
   await page.goto('/')
 
   const status = page.getByTestId('session-status')
@@ -20,19 +20,18 @@ test('connects, starts, adjusts closeness/intensity, and stops via Escape', asyn
   await page.getByRole('button', { name: 'Start' }).click()
   await expect(status).toHaveText('running')
 
-  await page.keyboard.press(']')
+  await page.keyboard.press('d')
   await expect(page.getByTestId('closeness-value')).toContainText('2')
   await expect(page.getByTestId('closeness-value')).toContainText('Approaching')
 
-  const intensity = page.locator('.intensity output')
-  await expect(intensity).toHaveText('50%')
-  await page.keyboard.press('d')
-  await expect(intensity).toHaveText('55%')
+  await page.keyboard.press('a')
+  await expect(page.getByTestId('closeness-value')).toContainText('1')
+  await expect(page.getByTestId('closeness-value')).toContainText('Far')
 
+  await page.keyboard.press('d')
   await page.keyboard.press('Escape')
   await expect(status).toHaveText('ready')
   await expect(page.getByTestId('closeness-value')).toContainText('1')
-  await expect(intensity).toHaveText('50%')
 
   await page.getByRole('button', { name: 'Disconnect', exact: true }).click()
   await expect(status).toHaveText('idle')

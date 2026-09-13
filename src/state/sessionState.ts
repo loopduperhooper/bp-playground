@@ -14,8 +14,6 @@ export interface SessionState {
   selectedDeviceId?: string
   selectedAlgorithmId: string
   closeness: Closeness
-  intensityScale: number
-  softMode: boolean
   eventLog: readonly SessionEvent[]
 }
 
@@ -34,8 +32,6 @@ export const initialSessionState: SessionState = {
   status: 'idle',
   selectedAlgorithmId: defaultAlgorithmId,
   closeness: 1,
-  intensityScale: 0.5,
-  softMode: false,
   eventLog: [{ message: 'Waiting for a fake device connection.', at: 0 }],
 }
 
@@ -53,8 +49,6 @@ export type SessionAction =
   | { type: 'stop-reset' }
   | { type: 'reset-session' }
   | { type: 'set-closeness'; closeness: Closeness }
-  | { type: 'set-intensity'; intensityScale: number }
-  | { type: 'toggle-soft-mode' }
 
 export function sessionReducer(state: SessionState, action: SessionAction): SessionState {
   switch (action.type) {
@@ -82,16 +76,14 @@ export function sessionReducer(state: SessionState, action: SessionAction): Sess
     }
     case 'stop-reset':
       return withEvent(
-        { ...state, status: state.selectedDeviceId ? 'ready' : 'idle', closeness: 1, intensityScale: 0.5, softMode: false },
+        { ...state, status: state.selectedDeviceId ? 'ready' : 'idle', closeness: 1 },
         'Stop and reset requested.',
       )
     case 'reset-session':
       return withEvent(
-        { ...state, status: state.selectedDeviceId ? 'ready' : 'idle', closeness: 1, intensityScale: 0.5, softMode: false },
+        { ...state, status: state.selectedDeviceId ? 'ready' : 'idle', closeness: 1 },
         'Session reset requested.',
       )
     case 'set-closeness': return { ...state, closeness: action.closeness }
-    case 'set-intensity': return { ...state, intensityScale: action.intensityScale }
-    case 'toggle-soft-mode': return { ...state, softMode: !state.softMode }
   }
 }
