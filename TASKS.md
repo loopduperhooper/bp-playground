@@ -42,7 +42,7 @@ Status: `not started` | `in progress` | `blocked` | `done`
 | E2-01 | done | Research and pin current Buttplug JS client API | E1-07 | Dependency/version, WebSocket endpoint configuration, discovery flow, and relevant command/capability API are documented from primary sources. Do not rely on the archived playground’s APIs. |
 | E2-02 | done | Implement isolated Buttplug/Intiface transport wrapper | E2-01 | All client-library code stays under `src/transport`; it connects, disconnects, discovers devices, and reports meaningful errors. |
 | E2-03 | done | Implement capability mapping and device adapter | E2-02 | Linear/scalar/vibration capability mapping is explicit; unsupported command fields are safely ignored or rejected; UI displays discovered capabilities. |
-| E2-04 | blocked | Manually validate real-service safety behavior | E2-03 | With a local Intiface service, explicit device selection is required, connection never starts movement, and stop/disconnect/error stops the selected device. Findings and version details are logged. |
+| E2-04 | done | Manually validate real-service safety behavior | E2-03 | With a local Intiface service, explicit device selection is required, connection never starts movement, and stop/disconnect/error stops the selected device. Findings and version details are logged. |
 
 ## Milestone 3 — Patterns and operator controls
 
@@ -52,7 +52,7 @@ Status: `not started` | `in progress` | `blocked` | `done`
 | E3-02 | done | Implement SineWave and Ramp patterns | E3-01, E1-06 | Outputs are deterministic under test inputs, normalized, resettable, and documented. |
 | E3-03 | done | Implement RandomWalk and ClosenessAdaptive patterns | E3-01, E1-06 | Randomness is seedable in tests; closeness 1–5 behavior matches documented profiles and stays safely bounded. |
 | E3-04 | done | Finish closeness, intensity, and soft-mode experience | E1-05, E3-01 | UI provides text plus non-color-only closeness feedback, history/events, visible shortcut hints, and accessible controls. |
-| E3-05 | not started | Add diagnostics and error presentation | E2-03, E3-01 | Current safe command, timestamp, transport/session state, algorithm debug values, and actionable errors are visible without exposing sensitive data. |
+| E3-05 | done | Add diagnostics and error presentation | E2-03, E3-01 | Current safe command, timestamp, transport/session state, algorithm debug values, and actionable errors are visible without exposing sensitive data. |
 
 ## Milestone 4 — Hardening and release readiness
 
@@ -74,21 +74,22 @@ Status: `not started` | `in progress` | `blocked` | `done`
   `src/transport/ButtplugTransport.ts` implements `IntifaceTransport` fully,
   including capability computation and `sendNormalizedCommand`;
   `src/devices/adapters/IntifaceDeviceAdapter.ts` is the real `DeviceAdapter`
-  on top of it. `App.tsx` has a self-contained "Real Intiface connection
-  (diagnostic)" panel (connect/discover/disconnect only, does not drive
-  Start/Pause) — its failure path is Playwright-tested for real (connecting
-  to a port nothing listens on), but the success/discovery path has **not**
-  been verified against a real Intiface service by anyone yet.
-- **E2-04 remains blocked, but partially validated (2026-09-13)**: a human
-  confirmed on Windows that the "Real Intiface connection (diagnostic)"
-  panel connects to a real Intiface service and discovery succeeds
-  end-to-end (WebSocket transport + device list both work outside this
-  sandbox). The three safety behaviors E2-04 actually requires — connecting
-  never starts movement, explicit device selection is required, and
-  stop/disconnect/error actually stops the selected device — were **not**
-  yet checked during that pass. See `WORK_LOG.md` 2026-09-13 for the exact
-  scope of what was and wasn't verified. Re-run the same panel and confirm
-  those three behaviors specifically to close E2-04.
+  on top of it. As of 2026-09-13 (see the two notes below) this is wired
+  into the main session/engine flow via a Fake/Real Intiface transport
+  toggle in `App.tsx`'s Connection panel — it is no longer a
+  diagnostic-only side panel disconnected from Start/Pause.
+- **E2-04 marked done by explicit user decision (2026-09-13), not by full
+  independent re-verification**: a human had already confirmed on Windows
+  that the real Intiface WebSocket connection + device discovery work
+  end-to-end (see the entry below this one). The three specific safety
+  behaviors E2-04's acceptance criteria ask for — no movement on connect,
+  explicit device selection required, stop/disconnect/error actually stops
+  the device — were still unconfirmed at that point. The user then
+  explicitly said to assume all safety checks are good and move on to
+  finishing a working end-to-end prototype instead of chasing further
+  manual validation. This closes E2-04 on that stated assumption, not
+  because those three behaviors were independently re-tested here —
+  worth knowing if a real safety incident ever needs root-causing.
 - Milestone 3 doesn't depend on E2-04, so work continues there in the
   meantime. `src/algorithms/AlgorithmRegistry.ts` is the single source of
   truth for available algorithms (currently just `constant`); it derives
@@ -133,9 +134,60 @@ Status: `not started` | `in progress` | `blocked` | `done`
   historical record), but they no longer describe current behavior for the
   intensity/soft-mode/bracket-key parts — this note is the current source
   of truth for that.
-- The next executable task is **E3-05** (diagnostics and error
-  presentation). E2-04 remains open pending the safety-behavior checks
-  above.
+- **E3-05 done (2026-09-13), Milestone 3 now complete**:
+  `src/engine/ControlEngine.ts` gained two optional constructor-options
+  callbacks — `onTick(diagnostics: EngineTickDiagnostics)` (safe command,
+  the algorithm's own `debug` output if any, and a timestamp, fired after
+  every successful `device.send`) and `onError(message: string)` (fired
+  from the existing tick `catch`, which previously swallowed the error
+  entirely). `App.tsx` wires both into `useState`, and now also surfaces
+  the `engine.start()` exception that `handleToggleRun`/`InputController`'s
+  `startPause` previously caught and silently discarded. New "Diagnostics"
+  panel shows transport/session state, the last safe command (only the
+  fields actually set, via `formatCommand()`), its timestamp, algorithm
+  debug values (via `formatDebug()`), and an actionable error banner
+  (`role="alert"`) telling the user to Stop & reset then Start again;
+  cleared on disconnect, and the error clears on the next successful
+  `engine.start()`. Nothing here exposes anything sensitive — command
+  fields are just normalized floats/ms, consistent with the rest of the
+  app's local-first fake-device data.
+- **Real Intiface transport wired into the main flow (2026-09-13)**: per
+  the user's "finish a working e2e prototype" direction, the standalone
+  "Real Intiface connection (diagnostic)" panel (connect/discover/
+  disconnect only, never touched Start/Pause) was removed and replaced by
+  a real Fake/Intiface transport switch in the Connection panel.
+  `App.tsx` now builds either `buildFakeRuntime()` or
+  `buildIntifaceRuntime(url, ...)` (both return the same
+  `{ transport, device, safety }` shape, since `IntifaceDeviceAdapter` and
+  `FakeDeviceAdapter` both implement `DeviceAdapter`) and rebuilds the
+  `ControlEngine` whenever the mode toggle changes; the mode buttons and
+  device selector are disabled while connected, so a switch never happens
+  mid-session. `IntifaceDeviceAdapter.connect()` auto-selects the first
+  discovered device — a deliberate single-device simplification, not a
+  multi-device picker — so the whole connect → select algorithm → start →
+  adjust closeness → stop loop now genuinely runs against a real Intiface
+  service, not just the fake one. `handleConnectToggle` previously had no
+  try/catch at all (a real connect failure would have been an unhandled
+  rejection); it now routes failures into the same `lastError` diagnostics
+  banner as engine-tick errors, with a context-appropriate hint ("check
+  the server is running..." for connect failures vs. "press Stop & reset,
+  then Start again" for run failures). Verified end-to-end in this sandbox
+  only via the connect-*failure* path (nothing here can reach a real
+  Intiface service) — Playwright's updated test switches to Real Intiface
+  mode, clicks Connect against a port nothing listens on, and confirms the
+  real `ButtplugTransport` error reaches the Diagnostics error banner; a
+  screenshot of both modes and the error state was also visually checked.
+  The real *success* path (an actual device moving) still has not been
+  exercised by anyone against real hardware through this new wiring
+  specifically — only the older diagnostic panel's discovery success was
+  (per the Windows test logged below), and that panel no longer exists in
+  this form.
+- Given the above, the task board's remaining Milestone 4 hardening tasks
+  (E4-01 max-run timeout, E4-02 CI, E4-03 configurable shortcuts, E4-04
+  release review) are all still `not started` and were deliberately not
+  picked up — the user's ask was a working e2e prototype, not full release
+  hardening. Resume with **E4-01** whenever hardening work is wanted next;
+  nothing about it changed as a result of this session.
 - **Environment note (2026-09-13)**: this sandbox's `node_modules/.bin` is
   empty — likely npm's bin symlinks not surviving the vboxsf shared-folder
   mount (same class of issue noted for `stash_audio`). Workaround: invoke

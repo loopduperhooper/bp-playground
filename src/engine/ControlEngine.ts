@@ -21,10 +21,19 @@ const defaultScheduler: EngineScheduler = {
   clear: (timer) => globalThis.clearTimeout(timer),
 }
 
+/** What actually went out on a successful tick, for diagnostics UI. */
+export interface EngineTickDiagnostics {
+  command: DeviceCommand
+  debug?: Readonly<Record<string, number | string | boolean>>
+  at: number
+}
+
 export interface ControlEngineOptions {
   cadenceMs?: number
   now?: () => number
   scheduler?: EngineScheduler
+  onTick?: (diagnostics: EngineTickDiagnostics) => void
+  onError?: (message: string) => void
 }
 
 /** Owns the bounded command loop and keeps algorithms independent of devices. */
@@ -38,6 +47,8 @@ export class ControlEngine {
   private readonly cadenceMs: number
   private readonly now: () => number
   private readonly scheduler: EngineScheduler
+  private readonly onTick?: (diagnostics: EngineTickDiagnostics) => void
+  private readonly onError?: (message: string) => void
 
   constructor(
     device: DeviceAdapter,
@@ -53,6 +64,8 @@ export class ControlEngine {
     this.cadenceMs = options.cadenceMs ?? 50
     this.now = options.now ?? (() => performance.now())
     this.scheduler = options.scheduler ?? defaultScheduler
+    this.onTick = options.onTick
+    this.onError = options.onError
   }
 
   setAlgorithm(algorithm: Algorithm): void {
@@ -100,8 +113,11 @@ export class ControlEngine {
 
     try {
       const output = this.algorithm.update(input)
-      await this.device.send(this.safety.validateAndClamp(output.command))
-    } catch {
+      const safeCommand = this.safety.validateAndClamp(output.command)
+      await this.device.send(safeCommand)
+      this.onTick?.({ command: safeCommand, debug: output.debug, at: this.now() })
+    } catch (error) {
+      this.onError?.(error instanceof Error ? error.message : String(error))
       this.safety.markStopped('send-error')
       await this.device.stop()
       return

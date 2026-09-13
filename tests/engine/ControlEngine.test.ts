@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { ConstantPattern } from '../../src/algorithms/implementations/ConstantPattern'
-import { ControlEngine, type EngineSafety } from '../../src/engine/ControlEngine'
+import { SineWavePattern } from '../../src/algorithms/implementations/SineWavePattern'
+import { ControlEngine, type EngineSafety, type EngineTickDiagnostics } from '../../src/engine/ControlEngine'
 import type { DeviceCommand } from '../../src/engine/types'
 import type { DeviceAdapter } from '../../src/devices/DeviceAdapter'
 
@@ -51,5 +52,52 @@ describe('ControlEngine', () => {
 
     expect(() => engine.start()).toThrow('Device is not ready')
     expect(policy.running).toBe(false)
+  })
+
+  it('calls onTick with the safe command, algorithm debug values, and a timestamp on success', async () => {
+    vi.useFakeTimers()
+    const commands: DeviceCommand[] = []
+    const policy = safety()
+    const diagnostics: EngineTickDiagnostics[] = []
+    const engine = new ControlEngine(
+      device(commands),
+      policy,
+      new SineWavePattern(),
+      () => ({ closeness: 3, manualIntensityScale: 1, isRunning: true, random: () => 0.5 }),
+      { onTick: (entry) => diagnostics.push(entry) },
+    )
+
+    engine.start()
+    await vi.advanceTimersByTimeAsync(50)
+
+    expect(diagnostics).toHaveLength(1)
+    expect(diagnostics[0].command).toMatchObject({ reason: 'sine-wave' })
+    expect(diagnostics[0].debug).toMatchObject({ wave: expect.any(Number), elapsedSeconds: expect.any(Number) })
+    expect(diagnostics[0].at).toBeTypeOf('number')
+
+    engine.stop()
+    vi.useRealTimers()
+  })
+
+  it('calls onError with an actionable message and stops when sending fails', async () => {
+    vi.useFakeTimers()
+    const commands: DeviceCommand[] = []
+    const failingDevice: DeviceAdapter = { ...device(commands), send: async () => { throw new Error('transport unreachable') } }
+    const policy = safety()
+    const errors: string[] = []
+    const engine = new ControlEngine(
+      failingDevice,
+      policy,
+      new ConstantPattern(),
+      () => ({ closeness: 1, manualIntensityScale: 1, isRunning: true, random: () => 0 }),
+      { onError: (message) => errors.push(message) },
+    )
+
+    engine.start()
+    await vi.advanceTimersByTimeAsync(50)
+
+    expect(errors).toEqual(['transport unreachable'])
+    expect(policy.stopped).toEqual(['send-error'])
+    vi.useRealTimers()
   })
 })

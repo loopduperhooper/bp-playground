@@ -22,6 +22,134 @@ Template:
 
 ---
 
+## 2026-09-13 — Claude — wire real Intiface transport into main flow; close E2-04 by user decision
+
+- Status: `done`
+- Summary: User said to assume all safety checks are good and finish a
+  working e2e prototype. Two things followed from that:
+  1. **E2-04 marked `done`** — not because the three specific safety
+     behaviors in its acceptance criteria (no movement on connect,
+     explicit selection required, stop/disconnect/error stops the device)
+     were re-verified, but because the user explicitly told me to assume
+     they're fine and move on. Recorded as an explicit-assumption closure
+     in `TASKS.md`, not a verified one, so it's traceable later if it
+     matters.
+  2. **Wired the real Intiface transport into the actual session/engine
+     flow**, replacing the standalone diagnostic-only panel that could
+     connect/discover but never drove Start/Pause. This was the real gap
+     between "prototype" and "working e2e" — everything up to now only
+     ran end-to-end against the in-memory fake device.
+- Files changed:
+  - `src/App.tsx`: replaced `createRuntime()`/`useIntifaceDiagnostics()`
+    with `buildFakeRuntime()`/`buildIntifaceRuntime(url, ...)` (sharing a
+    `buildSafety()` helper) and a `TransportMode = 'fake' | 'intiface'`
+    toggle. `runtimeRef` now stores `{ mode, transport, device, engine }`
+    and is rebuilt whenever `transportMode` changes (guarded in the UI by
+    disabling the mode buttons while `ready`, so this never fires
+    mid-session). The Connection panel gained a Fake/Real Intiface toggle
+    and a Server URL field (shown only in Intiface mode); the Device panel
+    shows either the fake-device dropdown or a read-only "Connected via
+    Intiface · <features>" line. `handleSelectDevice` now guards with
+    `transport instanceof FakeTransport` since `transport` is a union
+    type. `handleConnectToggle` previously had **no try/catch around
+    `device.connect()`** — a real connect failure would have been an
+    unhandled promise rejection; it now catches into the same `lastError`
+    state E3-05 added, tagged with a `context: 'connect' | 'run'` field so
+    the diagnostics error banner shows a connect-appropriate hint
+    ("check the server is running...") instead of the run-time one
+    ("press Stop & reset, then Start again") — caught via a screenshot
+    during manual verification, see below.
+  - `tests/e2e/app.spec.ts`: replaced the old diagnostic-panel failure
+    test with one that switches to Real Intiface mode and clicks the main
+    Connect button (nothing listens on the port, so this still exercises
+    `ButtplugTransport`'s real WebSocket failure path), asserting on the
+    new `diagnostics-error` testid instead of the removed
+    `intiface-message`.
+  - `TASKS.md`: E2-04 row → `done`; new reference notes explaining the
+    explicit-assumption closure, the real-transport wiring itself, and
+    that Milestone 4's hardening tasks were deliberately left alone.
+- Verification: same sandbox constraints as every entry below (empty
+  `.bin`, Node 18.19.1) — same workarounds.
+  - ESLint, `tsc -b`, Vite production build: all clean/succeeded.
+  - Playwright: all 3 tests passed, including the new real-transport
+    failure test.
+  - Manual visual check: started the dev server and used
+    `playwright-core` directly (a throwaway script, deleted after) to
+    screenshot Fake mode, Intiface mode before connecting, and the error
+    state after a failed Connect — confirmed the mode toggle, URL field,
+    and diagnostics error banner all render correctly; caught and fixed
+    the connect-vs-run error-hint mismatch this way.
+  - Not verified: an actual successful connection + running session
+    against a real Intiface service through this new wiring — no real
+    Intiface instance exists in this sandbox. Only the failure path is
+    machine-verified here; a real device run-through still needs a human
+    with real hardware, same limitation as before, just now on genuinely
+    different (previously untested) code.
+  - Vitest still cannot run in this sandbox (Node-version gap, documented
+    repeatedly above) — no new unit tests were added for this change since
+    it's UI/wiring, not new algorithmic logic; Playwright is the real
+    coverage here.
+- Decisions / blockers: None new. If a future session wants to actually
+  validate against real hardware, use the Connection panel's "Real
+  Intiface" mode directly — there is no separate diagnostic path anymore.
+- Next action: Milestone 4 hardening (E4-01 onward) is available whenever
+  wanted but was not started — out of scope for "finish a working e2e
+  prototype." The prototype itself is now feature-complete against both
+  the fake device and (mechanically, pending real-hardware confirmation)
+  a real Intiface service.
+
+## 2026-09-13 — Claude — E3-05
+
+- Status: `done`
+- Summary: Added diagnostics and error presentation, completing Milestone 3.
+  - `src/engine/ControlEngine.ts`: new `EngineTickDiagnostics` type
+    (`{ command, debug?, at }`) and two optional constructor-options
+    callbacks, `onTick`/`onError`. `tick()` now calls `onTick` with the
+    post-safety command, the algorithm's own `debug` output (if any), and
+    a timestamp, right after a successful `device.send`. The tick's
+    `catch` previously discarded the thrown error entirely (`catch {}`);
+    it now captures it and calls `onError(message)` before the existing
+    `markStopped('send-error')`/`device.stop()`.
+  - `src/App.tsx`: `diagnostics`/`lastError` state wired to those
+    callbacks. Also fixed a pre-existing gap: `engine.start()`'s
+    synchronous `Device is not ready` throw was being caught and silently
+    dropped in both `handleToggleRun` and `InputController`'s `startPause`
+    — both now route it into `lastError` instead of swallowing it.
+    New "Diagnostics" panel (`<h2>Diagnostics</h2>`) shows: transport
+    state (fake device connected/not), session status, the last safe
+    command via a new `formatCommand()` helper (only fields actually set —
+    an unsupported field reads as absent, not a stray 0), its timestamp
+    (reusing `formatEventTime()`), and algorithm debug values via a new
+    `formatDebug()` helper. An actionable error banner (`role="alert"`,
+    "<message> — press Stop & reset, then Start again.") shows when
+    `lastError` is set; cleared on disconnect, and implicitly stale (but
+    still informative) until the next successful `engine.start()` clears
+    it.
+  - No sensitive data involved — `DeviceCommand` fields are normalized
+    floats/milliseconds, same as everything else already shown in this
+    local-first fake-device app.
+- Files changed: `src/engine/ControlEngine.ts`, `src/App.tsx`,
+  `src/App.css`, `tests/engine/ControlEngine.test.ts`,
+  `tests/e2e/app.spec.ts`, `TASKS.md`.
+- Verification: same sandbox constraints noted in the two entries below
+  (empty `.bin`, Node 18.19.1) — same direct-invocation workarounds.
+  - ESLint: clean. `tsc -b`: clean. Vite production build: succeeded (78
+    modules transformed).
+  - Playwright: all 3 tests passed, including a new assertion in the
+    closeness test that `diagnostics-command` is populated (not `—`)
+    within one engine tick of Start — confirms `onTick` actually reaches
+    the UI in a real browser, not just via type-checking.
+  - Vitest: still cannot run in this sandbox (Node-version gap, see below)
+    — added two new `ControlEngine` unit tests (`onTick` fires with
+    command/debug/timestamp on success; `onError` fires with the thrown
+    message and the engine stops on a `device.send` failure) that are
+    unverified by an actual run here. Re-run `npm run test` on Node
+    20.19+ to confirm both before treating this as fully verified there.
+- Decisions / blockers: None. Milestone 3 (E3-01–E3-05) is now fully done.
+- Next action: **E4-01** (max-run timeout and recovery policy) is the next
+  unblocked task — depends only on E1-06 (done). E4-02 still needs E2-04
+  resolved too. E2-04 itself is unchanged from the entry below.
+
 ## 2026-09-13 — Claude — product decision (supersedes part of E1-03/E1-05)
 
 - Status: `done`

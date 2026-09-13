@@ -20,6 +20,8 @@ test('connects, starts, adjusts closeness, and stops via Escape', async ({ page 
   await page.getByRole('button', { name: 'Start' }).click()
   await expect(status).toHaveText('running')
 
+  await expect(page.getByTestId('diagnostics-command')).not.toHaveText('—')
+
   await page.keyboard.press('d')
   await expect(page.getByTestId('closeness-value')).toContainText('2')
   await expect(page.getByTestId('closeness-value')).toContainText('Approaching')
@@ -37,13 +39,16 @@ test('connects, starts, adjusts closeness, and stops via Escape', async ({ page 
   await expect(status).toHaveText('idle')
 })
 
-test('reports a real connection failure from the Intiface diagnostic panel', async ({ page }) => {
+test('reports a real connection failure when using the real Intiface transport', async ({ page }) => {
   await page.goto('/')
 
-  // Nothing listens on this port in the test environment, so this exercises
-  // ButtplugTransport's real WebSocket connect-failure path end to end.
-  await page.getByRole('button', { name: 'Connect & discover' }).click()
+  await page.getByRole('button', { name: 'Real Intiface' }).click()
 
-  await expect(page.getByTestId('intiface-message')).toContainText('Failed to connect to Intiface at ws://127.0.0.1:12345')
-  await expect(page.getByTestId('intiface-devices')).toHaveCount(0)
+  // Nothing listens on this port in the test environment, so this exercises
+  // ButtplugTransport's real WebSocket connect-failure path end to end,
+  // through the same main Connect button the fake-device flow uses.
+  await page.getByRole('button', { name: 'Connect' }).click()
+
+  await expect(page.getByTestId('diagnostics-error')).toContainText('Failed to connect to Intiface at ws://127.0.0.1:12345')
+  await expect(page.getByTestId('session-status')).toHaveText('idle')
 })
