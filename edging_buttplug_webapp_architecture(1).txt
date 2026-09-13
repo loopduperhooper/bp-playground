@@ -1,0 +1,889 @@
+EDGING BUTTPLUG WEBAPP — ARCHITECTURE & CODE STRUCTURE
+====================================================
+
+Purpose
+-------
+A local-first web application that connects to Intiface running locally,
+controls supported toys through Intiface (for example, The Handy or Kiiroo
+Keon when exposed by the local Intiface device service), and continuously
+generates motion/intensity commands using selectable algorithm classes.
+
+The design intentionally separates:
+
+  1. UI and user input
+  2. Session/control state
+  3. Algorithm selection and execution
+  4. Device abstraction
+  5. Intiface transport
+  6. Safety, stop, reset, and rate limiting
+
+This keeps the system testable and makes new algorithms easy to add.
+
+IMPORTANT DEVICE ASSUMPTION
+---------------------------
+The browser should not directly implement each toy's Bluetooth protocol.
+Instead, the browser connects to the local Intiface/Buttplug service through
+its supported WebSocket/client interface. Intiface/Buttplug handles the
+actual Bluetooth or other device transport.
+
+Verify the exact device capabilities exposed by the installed Intiface
+version. Different toys may expose different features, such as linear
+position, speed, vibration, or scalar commands. The adapter must inspect
+capabilities before sending commands.
+
+Suggested stack
+---------------
+
+Frontend:
+  - React + TypeScript
+  - Vite
+  - Tailwind or CSS modules
+  - Zustand, Redux Toolkit, or a small custom state store
+
+Transport:
+  - Buttplug JavaScript client / Intiface-compatible WebSocket client
+  - Local endpoint configured by the user, commonly a localhost WebSocket
+    endpoint. Do not hard-code an endpoint until verified against the
+    installed Intiface setup.
+
+Testing:
+  - Vitest for algorithms and state transitions
+  - Playwright for UI/keyboard behavior
+  - Fake device adapter for integration tests
+
+Optional backend:
+  - None required for the initial version.
+  - A local backend may be added later for persistence, profiles, or logging,
+    but the first version can remain entirely in the browser.
+
+High-level architecture
+-----------------------
+
+  Keyboard / UI controls
+          |
+          v
+  InputController -----> SessionStore <----- UI visualizations
+          |                   |
+          |                   v
+          |             ControlEngine
+          |                   |
+          v                   v
+  SafetyController      AlgorithmRegistry
+                              |
+                              v
+                       Selected Algorithm
+                              |
+                              v
+                        DeviceCommand
+                              |
+                              v
+                       DeviceManager
+                              |
+                              v
+                     IntifaceTransport
+                              |
+                              v
+                         Local Intiface
+                              |
+                              v
+                       Handy / Keon / etc.
+
+Recommended directory structure
+--------------------------------
+
+src/
+  app/
+    App.tsx
+    routes.ts
+
+  components/
+    ConnectionPanel.tsx
+    DeviceSelector.tsx
+    AlgorithmSelector.tsx
+    SessionControls.tsx
+    ClosenessIndicator.tsx
+    IntensityIndicator.tsx
+    KeyboardHelp.tsx
+    SafetyStatus.tsx
+    EventLog.tsx
+
+  state/
+    sessionStore.ts
+    settingsStore.ts
+    deviceStore.ts
+
+  input/
+    InputController.ts
+    keyBindings.ts
+    inputTypes.ts
+
+  engine/
+    ControlEngine.ts
+    EngineClock.ts
+    SafetyController.ts
+    CommandLimiter.ts
+    types.ts
+
+  algorithms/
+    Algorithm.ts
+    AlgorithmContext.ts
+    AlgorithmRegistry.ts
+    AlgorithmOutput.ts
+    implementations/
+      ConstantPattern.ts
+      SineWavePattern.ts
+      RampPattern.ts
+      RandomWalkPattern.ts
+      ClosenessAdaptivePattern.ts
+      CompositePattern.ts
+
+  devices/
+    DeviceManager.ts
+    DeviceAdapter.ts
+    DeviceCapabilities.ts
+    adapters/
+      ButtplugDeviceAdapter.ts
+      FakeDeviceAdapter.ts
+
+  transport/
+    IntifaceTransport.ts
+    ButtplugTransport.ts
+    FakeTransport.ts
+
+  safety/
+    safetyConstants.ts
+    safetyEvents.ts
+
+  utils/
+    clamp.ts
+    lerp.ts
+    now.ts
+
+  tests/
+    algorithms/
+    engine/
+    input/
+    devices/
+
+Core domain types
+-----------------
+
+// engine/types.ts
+
+export type SessionStatus =
+  | 'idle'
+  | 'connecting'
+  | 'ready'
+  | 'running'
+  | 'stopping'
+  | 'error';
+
+export type Closeness = 1 | 2 | 3 | 4 | 5;
+
+export type DeviceFeature =
+  | 'linear'
+  | 'vibration'
+  | 'rotation'
+  | 'oscillation'
+  | 'constriction';
+
+export interface DeviceCapabilities {
+  features: DeviceFeature[];
+  minPosition?: number;
+  maxPosition?: number;
+  minSpeed?: number;
+  maxSpeed?: number;
+  minIntensity?: number;
+  maxIntensity?: number;
+  supportsStop: boolean;
+}
+
+export interface DeviceCommand {
+  // All normalized values should be in the range 0..1 unless otherwise noted.
+  position?: number;
+  speed?: number;
+  intensity?: number;
+  vibration?: number;
+  durationMs?: number;
+  reason?: string;
+}
+
+export interface AlgorithmInput {
+  elapsedMs: number;
+  deltaMs: number;
+  closeness: Closeness;
+  manualIntensityScale: number;
+  isRunning: boolean;
+  lastCommand?: DeviceCommand;
+  random: () => number;
+}
+
+export interface AlgorithmOutput {
+  command: DeviceCommand;
+  debug?: Record<string, number | string | boolean>;
+}
+
+export interface Algorithm {
+  readonly id: string;
+  readonly name: string;
+  readonly description: string;
+  reset(): void;
+  update(input: AlgorithmInput): AlgorithmOutput;
+}
+
+Algorithm interface
+-------------------
+
+Each algorithm is a stateful object. It receives normalized session input and
+returns a normalized device command. It must not know about React, the DOM,
+keyboard events, or Intiface.
+
+Example:
+
+export class SineWavePattern implements Algorithm {
+  readonly id = 'sine-wave';
+  readonly name = 'Sine wave';
+  readonly description = 'Smooth periodic movement with adjustable speed.';
+
+  private phase = 0;
+
+  reset() {
+    this.phase = 0;
+  }
+
+  update(input: AlgorithmInput): AlgorithmOutput {
+    const frequency = 0.35 + input.closeness * 0.04;
+    this.phase += input.deltaMs / 1000 * frequency * Math.PI * 2;
+
+    const wave = (Math.sin(this.phase) + 1) / 2;
+    const closenessScale = 0.75 + input.closeness * 0.05;
+    const intensity = Math.min(
+      1,
+      wave * closenessScale * input.manualIntensityScale,
+    );
+
+    return {
+      command: {
+        position: wave,
+        speed: intensity,
+        intensity,
+        reason: 'sine-wave',
+      },
+      debug: { phase: this.phase, wave, frequency },
+    };
+  }
+}
+
+Algorithm registry
+------------------
+
+// algorithms/AlgorithmRegistry.ts
+
+import { Algorithm } from './Algorithm';
+
+export type AlgorithmFactory = () => Algorithm;
+
+export class AlgorithmRegistry {
+  private factories = new Map<string, AlgorithmFactory>();
+
+  register(id: string, factory: AlgorithmFactory) {
+    this.factories.set(id, factory);
+  }
+
+  create(id: string): Algorithm {
+    const factory = this.factories.get(id);
+    if (!factory) throw new Error(`Unknown algorithm: ${id}`);
+    return factory();
+  }
+
+  list() {
+    return [...this.factories.keys()];
+  }
+}
+
+Register algorithms at application startup:
+
+registry.register('sine-wave', () => new SineWavePattern());
+registry.register('ramp', () => new RampPattern());
+registry.register('random-walk', () => new RandomWalkPattern());
+registry.register('closeness-adaptive', () => new ClosenessAdaptivePattern());
+registry.register('composite', () => new CompositePattern(...));
+
+Control engine
+--------------
+
+The engine owns the continuous loop. Prefer requestAnimationFrame for UI
+synchronization, but use a fixed or bounded command cadence so the device is
+not flooded with commands. A practical initial target is approximately
+10–30 commands per second, subject to device and Intiface behavior.
+
+// engine/ControlEngine.ts
+
+export class ControlEngine {
+  private timer: number | undefined;
+  private lastTime = 0;
+  private algorithm: Algorithm;
+
+  constructor(
+    private readonly device: DeviceAdapter,
+    private readonly safety: SafetyController,
+    algorithm: Algorithm,
+    private readonly getInput: () => AlgorithmInput,
+  ) {
+    this.algorithm = algorithm;
+  }
+
+  setAlgorithm(algorithm: Algorithm) {
+    this.stop('algorithm-change');
+    this.algorithm.reset();
+    this.algorithm = algorithm;
+  }
+
+  start() {
+    if (!this.device.isReady()) throw new Error('Device is not ready');
+    if (!this.safety.canStart()) return;
+
+    this.safety.markRunning();
+    this.lastTime = performance.now();
+    this.scheduleNext();
+  }
+
+  stop(reason = 'user-stop') {
+    if (this.timer !== undefined) {
+      window.clearTimeout(this.timer);
+      this.timer = undefined;
+    }
+
+    this.algorithm.reset();
+    this.safety.markStopped(reason);
+    void this.device.stop();
+  }
+
+  private scheduleNext() {
+    this.timer = window.setTimeout(() => this.tick(), 50);
+  }
+
+  private async tick() {
+    if (!this.safety.isRunning()) return;
+
+    const now = performance.now();
+    const deltaMs = Math.min(250, now - this.lastTime);
+    this.lastTime = now;
+
+    const input = {
+      ...this.getInput(),
+      elapsedMs: this.safety.elapsedMs(),
+      deltaMs,
+    };
+
+    const output = this.algorithm.update(input);
+    const safeCommand = this.safety.validateAndClamp(output.command);
+
+    await this.device.send(safeCommand);
+    this.scheduleNext();
+  }
+}
+
+Device abstraction
+------------------
+
+The engine should depend on a small interface, not directly on Buttplug.
+
+// devices/DeviceAdapter.ts
+
+export interface DeviceAdapter {
+  connect(): Promise<void>;
+  disconnect(): Promise<void>;
+  isReady(): boolean;
+  getCapabilities(): DeviceCapabilities;
+  send(command: DeviceCommand): Promise<void>;
+  stop(): Promise<void>;
+}
+
+The Buttplug adapter translates normalized commands into the features
+supported by the selected device. For example:
+
+- A linear device may map position and speed to a linear command.
+- A vibration-only device may map intensity to vibration.
+- A device with multiple features may support a combined command.
+- Unsupported fields must be ignored or rejected explicitly.
+
+Do not assume every device supports every feature. The UI should show the
+capabilities of the selected device and disable incompatible controls.
+
+// devices/adapters/ButtplugDeviceAdapter.ts
+
+export class ButtplugDeviceAdapter implements DeviceAdapter {
+  private ready = false;
+  private capabilities!: DeviceCapabilities;
+
+  constructor(private readonly transport: IntifaceTransport) {}
+
+  async connect() {
+    await this.transport.connect();
+    const device = await this.transport.selectDevice();
+    this.capabilities = mapButtplugCapabilities(device);
+    this.ready = true;
+  }
+
+  isReady() {
+    return this.ready;
+  }
+
+  getCapabilities() {
+    return this.capabilities;
+  }
+
+  async send(command: DeviceCommand) {
+    if (!this.ready) throw new Error('Device not ready');
+    await this.transport.sendNormalizedCommand(command, this.capabilities);
+  }
+
+  async stop() {
+    if (this.ready) await this.transport.stopAll();
+  }
+
+  async disconnect() {
+    await this.stop();
+    await this.transport.disconnect();
+    this.ready = false;
+  }
+}
+
+Intiface transport
+------------------
+
+Keep all Buttplug-client-specific code in one file/module. This isolates API
+changes and makes tests independent of a real local service.
+
+// transport/IntifaceTransport.ts
+
+export interface IntifaceTransport {
+  connect(): Promise<void>;
+  disconnect(): Promise<void>;
+  listDevices(): Promise<unknown[]>;
+  selectDevice(): Promise<unknown>;
+  sendNormalizedCommand(
+    command: DeviceCommand,
+    capabilities: DeviceCapabilities,
+  ): Promise<void>;
+  stopAll(): Promise<void>;
+}
+
+Connection flow:
+
+1. User clicks Connect.
+2. App opens the local Intiface/Buttplug client connection.
+3. App discovers devices.
+4. User selects a device.
+5. Adapter reads capabilities.
+6. UI changes to Ready.
+7. Start remains disabled until a valid device and algorithm exist.
+
+Do not automatically start motion immediately after connecting.
+
+Closeness controls
+------------------
+
+Use a five-level state:
+
+  1 = far from edge
+  2 = approaching
+  3 = close
+  4 = very close
+  5 = about to blow
+
+The keyboard should support two independent actions:
+
+  - Increase closeness
+  - Decrease closeness
+
+Suggested default keys:
+
+  [ = decrease closeness
+  ] = increase closeness
+
+These can be remapped in settings. The current closeness must be visible in
+both text and a color/level indicator. Do not rely on color alone; show a
+number and label.
+
+The algorithm receives closeness as an input and may respond by changing
+frequency, amplitude, speed, pauses, ramp behavior, or intensity. The UI
+should not directly manipulate the device for closeness changes; it should
+only update state and let the algorithm respond consistently.
+
+Global keyboard controls
+------------------------
+
+Suggested default mapping:
+
+  Space       Start / pause
+  Escape      Complete stop + reset
+  A           Decrease intensity scale
+  D           Increase intensity scale
+  S           Toggle a temporary soft/pause mode, if implemented
+  [           Closeness -1
+  ]           Closeness +1
+  R           Reset algorithm/session state without reconnecting
+
+The user specifically requested one key for complete stop/reset. Escape is a
+reasonable default, but make it configurable and display it prominently.
+
+Important keyboard behavior:
+
+- Ignore keystrokes while focus is inside input, textarea, select, or button
+  controls unless the user explicitly enables global shortcuts.
+- Prevent browser defaults for handled keys where appropriate.
+- Use keydown with a repeat guard for actions that should fire once.
+- Stop/reset must be idempotent: pressing it repeatedly should be safe.
+- Stop/reset must cancel the loop, reset the algorithm, set intensity to a
+  safe baseline, and send a device stop command.
+- Consider requiring a fresh Start action after any global stop.
+
+// input/keyBindings.ts
+
+export const keyBindings = {
+  stopReset: 'Escape',
+  startPause: 'Space',
+  intensityDown: 'a',
+  intensityUp: 'd',
+  softMode: 's',
+  closenessDown: '[',
+  closenessUp: ']',
+  resetSession: 'r',
+};
+
+// input/InputController.ts
+
+export class InputController {
+  constructor(
+    private readonly actions: {
+      stopReset(): void;
+      startPause(): void;
+      intensityDown(): void;
+      intensityUp(): void;
+      softMode(): void;
+      closenessDown(): void;
+      closenessUp(): void;
+      resetSession(): void;
+    },
+  ) {}
+
+  attach() {
+    window.addEventListener('keydown', this.onKeyDown);
+  }
+
+  detach() {
+    window.removeEventListener('keydown', this.onKeyDown);
+  }
+
+  private onKeyDown = (event: KeyboardEvent) => {
+    const target = event.target as HTMLElement | null;
+    const tag = target?.tagName?.toLowerCase();
+    const isTyping = tag === 'input' || tag === 'textarea' || tag === 'select';
+    if (isTyping) return;
+
+    const key = event.key;
+    const action = this.resolve(key);
+    if (!action) return;
+
+    event.preventDefault();
+
+    // Escape and other one-shot commands should not repeat while held.
+    if (event.repeat && ['Escape', ' ', 'r'].includes(key)) return;
+    action();
+  };
+
+  private resolve(key: string) {
+    switch (key) {
+      case 'Escape': return this.actions.stopReset;
+      case ' ': return this.actions.startPause;
+      case 'a':
+      case 'A': return this.actions.intensityDown;
+      case 'd':
+      case 'D': return this.actions.intensityUp;
+      case 's':
+      case 'S': return this.actions.softMode;
+      case '[': return this.actions.closenessDown;
+      case ']': return this.actions.closenessUp;
+      case 'r':
+      case 'R': return this.actions.resetSession;
+      default: return undefined;
+    }
+  }
+}
+
+Session state
+-------------
+
+A minimal store might contain:
+
+interface SessionState {
+  status: SessionStatus;
+  selectedDeviceId?: string;
+  selectedAlgorithmId: string;
+  closeness: Closeness;
+  intensityScale: number; // 0..1
+  softMode: boolean;
+  elapsedMs: number;
+  lastCommand?: DeviceCommand;
+  lastError?: string;
+}
+
+State actions:
+
+- connect()
+- disconnect()
+- selectDevice(id)
+- selectAlgorithm(id)
+- start()
+- pause()
+- stopReset()
+- increaseCloseness()
+- decreaseCloseness()
+- increaseIntensity()
+- decreaseIntensity()
+- toggleSoftMode()
+- resetSession()
+
+Safety controller
+-----------------
+
+The safety controller should be a separate layer, not part of individual
+algorithms. It should enforce limits regardless of algorithm behavior.
+
+Recommended responsibilities:
+
+- Clamp all normalized values to 0..1.
+- Enforce device capability limits.
+- Enforce a maximum command frequency.
+- Enforce a maximum continuous run duration, if desired.
+- Provide a pause/soft mode multiplier.
+- Reject commands when disconnected or not ready.
+- Stop on transport errors.
+- Stop on explicit Escape/global stop.
+- Reset to a safe baseline after stop.
+- Optionally require confirmation before changing to a higher-risk profile.
+
+Example policy:
+
+interface SafetyPolicy {
+  maxIntensity: number;
+  maxSpeed: number;
+  maxRunMs: number;
+  softModeMultiplier: number;
+  minimumCommandIntervalMs: number;
+}
+
+validateAndClamp(command): DeviceCommand {
+  // Clamp, apply soft mode, and enforce capability limits.
+  // Return a command that is safe for the current device.
+}
+
+Avoid putting safety logic only in the UI. A hidden or buggy algorithm must
+still be constrained by the engine/safety layer.
+
+Algorithm examples
+------------------
+
+1. ConstantPattern
+   - Fixed position/speed/intensity.
+   - Useful for connection testing and calibration.
+
+2. SineWavePattern
+   - Smooth periodic position or intensity.
+   - Parameters: frequency, amplitude, baseline, intensity scale.
+
+3. RampPattern
+   - Gradually increases and decreases command values.
+   - Parameters: ramp duration, hold duration, minimum, maximum.
+
+4. RandomWalkPattern
+   - Bounded random changes around a target.
+   - Must use a seeded RNG in tests.
+   - Include smoothing and hard bounds to avoid abrupt changes.
+
+5. ClosenessAdaptivePattern
+   - Uses closeness to modify frequency, intensity, pause probability, or
+     amplitude.
+   - Example policy:
+       closeness 1: low amplitude, slower changes
+       closeness 2: moderate amplitude
+       closeness 3: normal profile
+       closeness 4: more variation, but capped intensity
+       closeness 5: reduce unpredictability and favor controlled behavior
+   - Do not assume closeness is a physiological measurement. It is a manual
+     user input and should be treated as subjective state.
+
+6. CompositePattern
+   - Combines multiple algorithms, such as a slow base movement plus a
+     smaller randomized modulation.
+   - Each child algorithm should produce normalized output.
+   - Composite applies weighted blending and final clamping.
+
+Example closeness mapping
+-------------------------
+
+function closenessProfile(closeness: Closeness) {
+  return {
+    amplitude: [0.25, 0.4, 0.55, 0.65, 0.5][closeness - 1],
+    intensityMultiplier: [0.45, 0.6, 0.75, 0.85, 0.7][closeness - 1],
+    variation: [0.1, 0.2, 0.3, 0.35, 0.15][closeness - 1],
+  };
+}
+
+Treat these numbers as illustrative defaults, not device-specific truths.
+Expose them as algorithm parameters or profiles rather than scattering magic
+numbers throughout the code.
+
+UI layout
+---------
+
+Top section:
+  - Connection status
+  - Connect/disconnect button
+  - Device dropdown
+  - Device capabilities summary
+
+Main controls:
+  - Algorithm dropdown
+  - Start/pause button
+  - Stop/reset button
+  - Intensity scale slider
+  - Soft mode toggle
+
+Closeness panel:
+  - Large 1–5 indicator
+  - Current label: Far / Approaching / Close / Very close / About to blow
+  - Buttons for -1 and +1
+  - Keyboard hint: [ and ]
+  - Visual history sparkline or recent level events
+
+Diagnostics:
+  - Current normalized command
+  - Last command timestamp
+  - Transport status
+  - Algorithm debug values
+  - Error banner
+
+The stop/reset control should be visually prominent and always available while
+running. Display the keyboard shortcut next to it.
+
+React hook/controller integration
+---------------------------------
+
+A possible React integration:
+
+function useControlSession() {
+  const session = useSessionStore();
+  const engineRef = useRef<ControlEngine | null>(null);
+
+  useEffect(() => {
+    const input = new InputController({
+      stopReset: session.stopReset,
+      startPause: session.startPause,
+      intensityDown: session.decreaseIntensity,
+      intensityUp: session.increaseIntensity,
+      softMode: session.toggleSoftMode,
+      closenessDown: session.decreaseCloseness,
+      closenessUp: session.increaseCloseness,
+      resetSession: session.resetSession,
+    });
+
+    input.attach();
+    return () => input.detach();
+  }, [session]);
+
+  return session;
+}
+
+Keep engine instances outside render cycles. Recreate an algorithm only when
+the selected algorithm changes or when the session is reset.
+
+Testing strategy
+----------------
+
+Unit tests:
+
+- Every algorithm returns values within expected normalized bounds.
+- Algorithm reset returns it to a deterministic initial state.
+- Closeness 1..5 changes output according to its documented profile.
+- Safety clamps over-limit commands.
+- Escape invokes stop/reset exactly once per key press.
+- Key repeat does not repeatedly trigger one-shot stop/reset.
+- Start is rejected when no device is ready.
+- Stop is safe when already stopped.
+
+Fake-device integration tests:
+
+- Connect fake transport.
+- Select fake device capabilities.
+- Start engine.
+- Advance fake clock.
+- Verify commands are emitted at the expected cadence.
+- Trigger stop/reset.
+- Verify stop command and algorithm reset.
+
+End-to-end tests:
+
+- Connect UI to fake transport.
+- Select algorithm from dropdown.
+- Use keyboard controls.
+- Verify closeness indicator updates.
+- Verify stop/reset returns UI to idle and command output to safe baseline.
+
+Implementation order
+--------------------
+
+Phase 1: Skeleton
+  1. Create Vite React TypeScript app.
+  2. Add session store and UI shell.
+  3. Add FakeDeviceAdapter and FakeTransport.
+  4. Implement ControlEngine with ConstantPattern.
+  5. Implement Escape stop/reset.
+
+Phase 2: Real Intiface connection
+  1. Add the supported Buttplug/Intiface client dependency.
+  2. Implement transport wrapper.
+  3. Discover devices and map capabilities.
+  4. Add explicit device selection.
+  5. Test stop behavior with the real service before adding complex patterns.
+
+Phase 3: Algorithms and controls
+  1. Add registry and algorithm dropdown.
+  2. Add SineWave, Ramp, RandomWalk, and ClosenessAdaptive algorithms.
+  3. Add closeness keys and indicator.
+  4. Add intensity scaling and soft mode.
+  5. Add algorithm debug panel.
+
+Phase 4: Hardening
+  1. Add command limiter and safety policy.
+  2. Add transport error handling.
+  3. Add max-run timeout.
+  4. Add automated tests.
+  5. Add configurable key bindings and saved profiles.
+
+Potential future features
+-------------------------
+
+- Algorithm parameter editor with JSON/schema-backed forms.
+- Preset profiles for different devices.
+- Timeline/sequence editor that switches algorithms over time.
+- Recording and replay of manually created command sequences.
+- Seeded randomness for reproducible patterns.
+- Local-only session history.
+- MIDI/gamepad input support.
+- Web Audio or external event input, if desired.
+- Per-device calibration for range, speed, and command semantics.
+
+Suggested first milestone
+-------------------------
+
+Build a safe vertical slice:
+
+  Fake device -> ControlEngine -> ConstantPattern -> UI dropdown ->
+  closeness state -> keyboard controls -> Escape stop/reset.
+
+Once that works reliably, replace FakeTransport with the actual local
+Intiface transport. This avoids debugging UI, algorithm timing, Bluetooth,
+and device capability issues simultaneously.
