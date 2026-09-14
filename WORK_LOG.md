@@ -22,6 +22,61 @@ Template:
 
 ---
 
+## 2026-09-13 — Claude — fix ControlEngine durationMs mismatch causing device stutter (real-hardware finding)
+
+- Status: `done`
+- Summary: User tested e2e against real Intiface + a Keon and reported
+  stutter, suspecting an interpolation/update-rate mismatch, and pointed at
+  the locally cloned `MultiFunPlayer` repo as a reference for how it
+  handles per-tick device updates. Investigation confirmed a real bug, not
+  a fundamental protocol gap: `ButtplugTransport.ts` already sends
+  `DeviceOutput.PositionWithDuration` (device/firmware owns the curve, no
+  client-side interpolation — matches MFP's approach), but no algorithm
+  ever set `DeviceCommand.durationMs`, so every command fell back to
+  `ButtplugTransport.ts`'s hardcoded `defaultLinearMoveDurationMs` (500ms)
+  regardless of `ControlEngine`'s actual 50ms tick cadence. Each new
+  50ms-interval command was telling the device to interrupt its still-in-
+  flight 500ms move and start a new 500ms one — a 10x restart-before-
+  completion mismatch, which is almost certainly what read as stutter.
+  MultiFunPlayer's `ButtplugOutputTarget.FixedUpdateAsync` avoids this by
+  tying the `LinearCmd` duration to the actual measured elapsed time since
+  the last tick, not a fixed guess, so each move finishes right as the
+  next command arrives.
+- Files changed:
+  - `src/engine/ControlEngine.ts`: `tick()` now fills in
+    `durationMs: output.command.durationMs ?? Math.max(1, Math.round(deltaMs) + 1)`
+    before calling `safety.validateAndClamp` — ties duration to the
+    measured tick gap (`deltaMs`), mirroring MFP's fixed-update pattern.
+    An algorithm-supplied `durationMs` (none currently set one) is still
+    respected and not overridden.
+  - `tests/engine/ControlEngine.test.ts`: added two tests — durationMs is
+    derived from the measured cadence when the algorithm omits it, and an
+    explicit algorithm-supplied durationMs passes through unchanged.
+  - `TASKS.md`: added `E4-05` (not started) — make `cadenceMs` a tunable
+    per-connection setting with clamped min/max, mirroring MFP's
+    `UpdateInterval`, instead of a fixed 50ms constant, so devices like
+    Keon-over-BLE that may need a slower update rate than 50ms can be
+    tuned without code changes. Deliberately no per-device-name branching.
+- Verification: `node node_modules/typescript/bin/tsc -b` and
+  `node node_modules/eslint/bin/eslint.js` both clean on the changed
+  files. **Vitest could not run** — same Node 18/jsdom `ERR_REQUIRE_ESM`
+  sandbox limitation recorded elsewhere in this file (needs Node
+  20.19+); the two new tests were traced by hand against
+  `vi.advanceTimersByTimeAsync` semantics but are not machine-verified
+  here. A human should run `vitest` (or the app against real hardware)
+  on a Node 20.19+ machine to confirm both the tests pass and that the
+  Keon no longer stutters.
+- Decisions / blockers: E4-05 (tunable cadence) deliberately left
+  `not started` — this session only fixed the confirmed bug (duration/
+  cadence mismatch); making the tick rate itself configurable is a small
+  but separate follow-up, not required to fix the reported stutter.
+- Next action: get real-hardware confirmation that the Keon stutter is
+  resolved; if it persists even with matched duration/cadence (e.g. BLE
+  round-trip still can't keep up at 50ms), pick up E4-05 to make cadence
+  tunable per connection.
+
+---
+
 ## 2026-09-13 — Claude — wire real Intiface transport into main flow; close E2-04 by user decision
 
 - Status: `done`

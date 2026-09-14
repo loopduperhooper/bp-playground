@@ -44,6 +44,59 @@ describe('ControlEngine', () => {
     vi.useRealTimers()
   })
 
+  it('fills in durationMs from the measured tick gap when the algorithm omits it', async () => {
+    vi.useFakeTimers()
+    const commands: DeviceCommand[] = []
+    const policy = safety()
+    const engine = new ControlEngine(
+      device(commands),
+      policy,
+      new ConstantPattern(),
+      () => ({ closeness: 3, manualIntensityScale: 1, isRunning: true, random: () => 0.5 }),
+      { cadenceMs: 50 },
+    )
+
+    engine.start()
+    await vi.advanceTimersByTimeAsync(151)
+
+    expect(commands.length).toBe(3)
+    for (const command of commands) {
+      expect(command.durationMs).toBeGreaterThanOrEqual(50)
+      expect(command.durationMs).toBeLessThan(55)
+    }
+
+    engine.stop()
+    vi.useRealTimers()
+  })
+
+  it('does not override an explicit durationMs from the algorithm', async () => {
+    vi.useFakeTimers()
+    const commands: DeviceCommand[] = []
+    const policy = safety()
+    const explicitDurationAlgorithm = {
+      id: 'explicit-duration',
+      name: 'Explicit duration',
+      description: 'test double',
+      reset: () => {},
+      update: () => ({ command: { position: 0.5, durationMs: 1234, reason: 'explicit-duration' } }),
+    }
+    const engine = new ControlEngine(
+      device(commands),
+      policy,
+      explicitDurationAlgorithm,
+      () => ({ closeness: 3, manualIntensityScale: 1, isRunning: true, random: () => 0.5 }),
+    )
+
+    engine.start()
+    await vi.advanceTimersByTimeAsync(50)
+
+    expect(commands).toHaveLength(1)
+    expect(commands[0].durationMs).toBe(1234)
+
+    engine.stop()
+    vi.useRealTimers()
+  })
+
   it('rejects start when the device is not ready', () => {
     const commands: DeviceCommand[] = []
     const policy = safety()

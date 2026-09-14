@@ -113,7 +113,17 @@ export class ControlEngine {
 
     try {
       const output = this.algorithm.update(input)
-      const safeCommand = this.safety.validateAndClamp(output.command)
+      // Algorithms are timing-independent and never set durationMs, so without this
+      // the transport's fixed 500ms fallback would apply every tick regardless of
+      // actual cadence — each command would restart a still-in-flight 500ms move
+      // long before it finished, producing stutter on real devices. Tying duration
+      // to the measured tick gap instead lets each move finish right as the next
+      // command arrives (same fix as MultiFunPlayer's FixedUpdate).
+      const command: DeviceCommand = {
+        ...output.command,
+        durationMs: output.command.durationMs ?? Math.max(1, Math.round(deltaMs) + 1),
+      }
+      const safeCommand = this.safety.validateAndClamp(command)
       await this.device.send(safeCommand)
       this.onTick?.({ command: safeCommand, debug: output.debug, at: this.now() })
     } catch (error) {

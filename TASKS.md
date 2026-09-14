@@ -62,6 +62,7 @@ Status: `not started` | `in progress` | `blocked` | `done`
 | E4-02 | not started | Expand test coverage and CI | E2-04, E3-05, E4-01 | Unit, fake-adapter integration, and Playwright flows run in CI; test instructions are documented. |
 | E4-03 | not started | Add configurable shortcuts and local profiles | E4-02 | Changes validate conflicts, persist locally only when approved in E0-02, and retain a guaranteed stop/reset shortcut. |
 | E4-04 | not started | Security, accessibility, and release review | E4-02, E4-03 | Local-first behavior, dependency/license review, keyboard accessibility, error handling, and a real-device stop checklist are signed off in the work log. |
+| E4-05 | not started | Make engine tick cadence a tunable connection setting | E2-03 | `ControlEngine`'s `cadenceMs` (currently a fixed 50ms constant) is exposed as a user-adjustable setting with sane min/max bounds (mirroring MultiFunPlayer's clamped `UpdateInterval`), so a device that stutters at 50ms (e.g. Keon over BLE, per 2026-09-13 real-hardware testing notes) can be tuned without code changes. No per-device-name special-casing. |
 
 ## Reference notes
 
