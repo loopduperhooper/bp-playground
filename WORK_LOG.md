@@ -22,6 +22,64 @@ Template:
 
 ---
 
+## 2026-09-13 — Claude — add EdgeCycle pattern (E3-06)
+
+- Status: `done`
+- Summary: User described a new pattern verbally (baseline hops between
+  bottom/middle/top every 2s; every 3-5 random minutes, if closeness isn't
+  4-5, ramp up over 1 minute through three 20s segments at 1s/0.75s/0.5s
+  cadence; if closeness hits 4-5 at any point during that ramp, freeze
+  position 1s later for 10s, then return to baseline and only start
+  counting the next 3-5 min once closeness drops back below 4; every
+  decision must move to a *different* one of the three positions, coinflip
+  between the two non-current ones). The spec was verbal/ambiguous in a
+  few places, so the exact interpretation chosen is documented in the new
+  file's class doc comment and here:
+  - The 3-5min timer only exists/counts while closeness ≤ 3. It's
+    represented as `pickupCountdownMs: number | null`, where `null` means
+    "not counting — waiting for closeness ≤ 3 to roll a fresh delay".
+    This same mechanism handles all three cases the spec implies: the
+    initial start, the timer naturally expiring while closeness is
+    already 4-5 (don't start; wait), and returning to baseline after a
+    hold-interrupted pickup (also don't start; wait).
+  - The hold's "after 1 second, for 10 sec" was read as: hold begins 1s
+    after closeness is first observed ≥4 during pickup, and lasts 10s,
+    then unconditionally returns to baseline (pickup is abandoned, not
+    resumed).
+  - Each command's `durationMs` is set to the time remaining until the
+    *next* decision (shrinking every engine tick, not a fixed value),
+    matching the `ControlEngine` cadence-duration fix earlier today — a
+    fixed duration resent every ~50ms while the target hasn't changed
+    would make the device re-target a fresh full-length move from
+    wherever it actually is each time, which typically means it never
+    converges to the endpoint within the intended interval.
+- Files changed:
+  - `src/algorithms/implementations/EdgeCyclePattern.ts` (new) — full
+    baseline/pickup/hold state machine, all durations/thresholds are
+    constructor options with defaults matching the spec (2000ms baseline,
+    3-5min pickup delay, three 20s/1000-750-500ms pickup segments, 1000ms
+    hold grace, 10000ms hold duration).
+  - `src/algorithms/AlgorithmRegistry.ts` — registered it.
+  - `tests/algorithms/EdgeCyclePattern.test.ts` (new) — baseline
+    alternation/duration values, pickup-trigger gating on closeness,
+    the full hold-trigger → freeze → baseline-with-gate sequence
+    (hand-traced tick-by-tick), intensity scaling, and reset.
+  - `TASKS.md` — added `E3-06` (done).
+- Verification: `tsc -b`, `eslint`, and `vite build` all clean. **Vitest
+  still can't run here** (same Node 18/jsdom `ERR_REQUIRE_ESM` limitation
+  as every other entry in this file) — the new tests are hand-traced
+  tick-by-tick against the exact code, not machine-verified. A human on
+  Node 20.19+ should run `vitest` before trusting this, and ideally try
+  it against real hardware given how verbal/ambiguous parts of the spec
+  were — flag back if the interpretation choices above don't match intent.
+- Decisions / blockers: none blocking; interpretation choices above are
+  the main risk if this doesn't match what was meant.
+- Next action: get confirmation (ideally real-hardware) that the
+  behavior matches intent, particularly the hold-timing interpretation
+  and the "gated until closeness ≤ 3" reroll rule.
+
+---
+
 ## 2026-09-13 — Claude — fix ControlEngine durationMs mismatch causing device stutter (real-hardware finding)
 
 - Status: `done`

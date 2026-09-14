@@ -1,6 +1,7 @@
 import type { Algorithm } from './Algorithm'
 import { ClosenessAdaptivePattern } from './implementations/ClosenessAdaptivePattern'
 import { ConstantPattern } from './implementations/ConstantPattern'
+import { EdgeCyclePattern } from './implementations/EdgeCyclePattern'
 import { RampPattern } from './implementations/RampPattern'
 import { RandomWalkPattern } from './implementations/RandomWalkPattern'
 import { SineWavePattern } from './implementations/SineWavePattern'
@@ -28,6 +29,7 @@ const factories: readonly (() => Algorithm)[] = [
   () => new RampPattern(),
   () => new RandomWalkPattern(),
   () => new ClosenessAdaptivePattern(),
+  () => new EdgeCyclePattern(),
 ]
 
 const entries: readonly AlgorithmRegistryEntry[] = factories.map((create) => {

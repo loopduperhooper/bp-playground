@@ -53,6 +53,7 @@ Status: `not started` | `in progress` | `blocked` | `done`
 | E3-03 | done | Implement RandomWalk and ClosenessAdaptive patterns | E3-01, E1-06 | Randomness is seedable in tests; closeness 1–5 behavior matches documented profiles and stays safely bounded. |
 | E3-04 | done | Finish closeness, intensity, and soft-mode experience | E1-05, E3-01 | UI provides text plus non-color-only closeness feedback, history/events, visible shortcut hints, and accessible controls. |
 | E3-05 | done | Add diagnostics and error presentation | E2-03, E3-01 | Current safe command, timestamp, transport/session state, algorithm debug values, and actionable errors are visible without exposing sensitive data. |
+| E3-06 | done | Implement EdgeCycle pattern (closeness-gated baseline/pickup/hold cycle) | E3-01, E1-06 | Bottom/middle/top cadence never repeats the current position; a randomized 3-5min timer (paused unless closeness ≤ 3) triggers a 1min acceleration; closeness ≥ 4 during acceleration freezes position for 10s then returns to baseline, gated on closeness dropping again before the next attempt. Deterministic under seeded/overridden-duration test inputs. |
 
 ## Milestone 4 — Hardening and release readiness
 
